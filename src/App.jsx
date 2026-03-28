@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { fetchPostcodeData, LONDON_POSTCODES as ALL_POSTCODES } from "./data/fetchPostcodes";
 
 const style = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
@@ -671,8 +672,18 @@ function HomePage({ onNavigate }) {
 function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
+  const [apiPostcodes, setApiPostcodes] = useState(LONDON_POSTCODES);
 
-  const ranked = [...LONDON_POSTCODES]
+  useEffect(() => {
+    async function load() {
+      const results = await Promise.all(ALL_POSTCODES.map(c => fetchPostcodeData(c)));
+      const valid = results.filter(Boolean);
+      if (valid.length > 0) setApiPostcodes(valid);
+    }
+    load();
+  }, []);
+
+  const ranked = [...apiPostcodes]
     .map(p => ({ ...p, score: computeScore(p, weights) }))
     .sort((a,b) => b.score - a.score);
 
