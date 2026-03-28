@@ -120,3 +120,50 @@ export async function fetchPostcodeData(code) {
     return null;
   }
 }
+
+export const RENTALS = {
+  "E1": [
+    {
+      address: "123 Brick Lane, London E1",
+      price: "£2,200 pcm",
+      beds: "2 bed flat",
+      description: "Modern 2-bedroom apartment in the heart of Shoreditch with excellent transport links.",
+      imageUrl: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=300&fit=crop"
+    },
+    {
+      address: "45 Commercial Street, London E1",
+      price: "£1,800 pcm",
+      beds: "1 bed flat",
+      description: "Stylish 1-bedroom flat with city views, close to bars and restaurants.",
+      imageUrl: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop"
+    }
+  ],
+  "N1": [
+    {
+      address: "78 Upper Street, London N1",
+      price: "£2,500 pcm",
+      beds: "3 bed house",
+      description: "Spacious Victorian house with garden, perfect for families.",
+      imageUrl: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=400&h=300&fit=crop"
+    }
+  ],
+  "SE1": [
+    {
+      address: "90 Southwark Street, London SE1",
+      price: "£2,100 pcm",
+      beds: "2 bed apartment",
+      description: "Contemporary apartment overlooking the Thames with modern amenities.",
+      imageUrl: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400&h=300&fit=crop"
+    }
+  ],
+  "W1": [
+    {
+      address: "15 Oxford Street, London W1",
+      price: "£3,500 pcm",
+      beds: "2 bed penthouse",
+      description: "Luxury penthouse with panoramic views of central London.",
+      imageUrl: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop"
+    }
+  ]
+  // Add more as needed
+};
