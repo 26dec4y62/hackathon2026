@@ -1004,7 +1004,7 @@ function ExplorePage() {
 
         <div className="explore-main">
           <div style={{position:'relative'}}>
-            <div ref={mapRef} style={{height: '91vh', minHeight: '420px', borderRadius: '8px', border: '1px solid var(--stone)', overflow: 'hidden'}} />
+            <div ref={mapRef} style={{height: '92vh', minHeight: '420px', borderRadius: '8px', border: '1px solid var(--stone)', overflow: 'hidden'}} />
             {mapError && (
               <div style={{position:'absolute', top:'12px', left:'12px', right:'12px', background:'rgba(44,41,36,0.9)', color:'#fff', padding:'8px 10px', borderRadius:'8px', fontSize:'12px'}}>
                 {mapError}
