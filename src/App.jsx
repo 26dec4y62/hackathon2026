@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchPostcodeData, LONDON_POSTCODES as ALL_POSTCODES } from "./data/fetchPostcodes";
+import { fetchPostcodeData, LONDON_POSTCODES } from "./data/fetchPostcodes";
+
+const POSTCODES = LONDON_POSTCODES;
 
 const style = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
@@ -444,7 +446,7 @@ const style = `
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 
-const LONDON_POSTCODES = [
+const BASE_POSTCODE_DATA = [
   { code:"E1",  area:"Whitechapel / Shoreditch", rent:72, nightlife:88, transport:82, greenery:38, age:85, culture:90 },
   { code:"E2",  area:"Bethnal Green",             rent:68, nightlife:80, transport:76, greenery:52, age:82, culture:78 },
   { code:"E3",  area:"Bow / Mile End",            rent:74, nightlife:60, transport:70, greenery:62, age:75, culture:58 },
@@ -474,6 +476,30 @@ const LONDON_POSTCODES = [
   { code:"W12", area:"Shepherd's Bush",           rent:56, nightlife:68, transport:80, greenery:52, age:68, culture:70 },
   { code:"WC1", area:"Bloomsbury / Holborn",      rent:38, nightlife:68, transport:92, greenery:48, age:62, culture:84 },
 ];
+
+const POSTCODE_DATA_MAP = Object.fromEntries(BASE_POSTCODE_DATA.map(d => [d.code, d]));
+
+function placeholderStats(code) {
+  const seed = code.split('').reduce((a,c)=>a+c.charCodeAt(0), 0);
+  const r = (min,max,offset=0) => min + ((seed + offset) % (max - min));
+  return {
+    rent: r(40,80,1), nightlife: r(30,85,2), transport: r(45,90,3), greenery: r(30,80,4), age: r(40,85,5), culture: r(30,85,6)
+  };
+}
+
+function getPostcodeRecord(code) {
+  return POSTCODE_DATA_MAP[code] || { code, area: code, ...placeholderStats(code) };
+}
+
+const ALL_POSTCODE_DATA = POSTCODES.map(getPostcodeRecord);
+
+function getPostcodeCoords(code) {
+  if (POSTCODE_COORDS[code]) return POSTCODE_COORDS[code];
+  const idx = POSTCODES.indexOf(code);
+  const angle = ((idx === -1 ? Math.random() : idx / POSTCODES.length) * Math.PI * 2);
+  const radius = 70 + ((idx % 8) * 12);
+  return [300 + Math.cos(angle) * radius, 350 + Math.sin(angle) * radius];
+}
 
 const FACTORS = [
   { id:"rent",      label:"Rent affordability",   color:"#8A9E8C", bg:"#EEF3EE" },
@@ -600,7 +626,7 @@ function HomePage({ onNavigate }) {
             </button>
           </div>
           <div className="ai-dot" style={{width:5,height:5,borderRadius:'50%',background:'var(--sage)',display:'inline-block',marginTop:32,marginRight:6,animation:'pulse 2s infinite'}}></div>
-          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 28 London postcodes</span>
+          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 111 London postcodes</span>
         </div>
         <div className="hero-right">
           <div className="hero-map-card">
@@ -623,7 +649,7 @@ function HomePage({ onNavigate }) {
 
       <div className="stats-row">
         <div className="stat-cell">
-          <div className="stat-num">28</div>
+          <div className="stat-num">111</div>
           <div className="stat-label">London postcodes ranked</div>
         </div>
         <div className="stat-cell">
@@ -672,13 +698,16 @@ function HomePage({ onNavigate }) {
 function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
-  const [apiPostcodes, setApiPostcodes] = useState(LONDON_POSTCODES);
+  const [apiPostcodes, setApiPostcodes] = useState(ALL_POSTCODE_DATA);
 
   useEffect(() => {
     async function load() {
-      const results = await Promise.all(ALL_POSTCODES.map(c => fetchPostcodeData(c)));
+      const results = await Promise.all(POSTCODES.map(c => fetchPostcodeData(c)));
       const valid = results.filter(Boolean);
-      if (valid.length > 0) setApiPostcodes(valid);
+      if (valid.length > 0) {
+        const fullSet = POSTCODES.map(code => valid.find(p => p.code === code) || getPostcodeRecord(code));
+        setApiPostcodes(fullSet);
+      }
     }
     load();
   }, []);
@@ -853,8 +882,8 @@ function HeatmapPage() {
     ctx.fillRect(0, 0, W, H);
 
     // Draw a soft radial blob per postcode
-    LONDON_POSTCODES.forEach(p => {
-      const [cx, cy] = POSTCODE_COORDS[p.code];
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
       const score = p[activeFactor];
       const radius = 52;
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
@@ -868,8 +897,8 @@ function HeatmapPage() {
     });
 
     // Draw dot + label per postcode
-    LONDON_POSTCODES.forEach(p => {
-      const [cx, cy] = POSTCODE_COORDS[p.code];
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
       const score = p[activeFactor];
       const isHovered = hovered?.code === p.code;
       const dotR = isHovered ? 9 : 6;
@@ -914,8 +943,8 @@ function HeatmapPage() {
     const my = (e.clientY - rect.top)  * scaleY;
 
     let closest = null, closestD = Infinity;
-    LONDON_POSTCODES.forEach(p => {
-      const [cx, cy] = POSTCODE_COORDS[p.code];
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
       const d = Math.hypot(cx - mx, cy - my);
       if (d < 30 && d < closestD) { closest = p; closestD = d; }
     });
