@@ -684,7 +684,7 @@ function HomePage({ onNavigate }) {
             </button>
           </div>
           <div className="ai-dot" style={{width:5,height:5,borderRadius:'50%',background:'var(--sage)',display:'inline-block',marginTop:32,marginRight:6,animation:'pulse 2s infinite'}}></div>
-          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 111 London postcodes</span>
+          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 119 London postcodes</span>
         </div>
         <div className="hero-right">
           <div className="hero-map-card">
@@ -707,7 +707,7 @@ function HomePage({ onNavigate }) {
 
       <div className="stats-row">
         <div className="stat-cell">
-          <div className="stat-num">111</div>
+          <div className="stat-num">119</div>
           <div className="stat-label">London postcodes ranked</div>
         </div>
         <div className="stat-cell">
