@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { fetchPostcodeData, LONDON_POSTCODES, POSTCODE_COORDS_MAP } from "./data/fetchPostcodes";
+import londonOutcodesGeoJsonRaw from "./data/london_outcodes_merged.geojson?raw";
 
 const POSTCODES = LONDON_POSTCODES;
 
@@ -646,6 +647,15 @@ function scoreToColor(score, alpha = 1) {
   return normalizedToColor(score / 100, alpha);
 }
 
+function normalizeCode(code) {
+  return String(code || "").toUpperCase().replace(/\s+/g, "");
+}
+
+function toAreaOutcode(code) {
+  const m = normalizeCode(code).match(/^([A-Z]{1,2}\d{1,2})/);
+  return m ? m[1] : "";
+}
+
 // ── PAGES ─────────────────────────────────────────────────────────────────────
 
 function HomePage({ onNavigate }) {
@@ -753,6 +763,15 @@ function ExplorePage() {
   const markersRef = useRef({});
   const mapInstanceRef = useRef(null);
   const infoWindowRef = useRef(null);
+  const boundaryClickListenerRef = useRef(null);
+
+  const boundariesGeoJson = useMemo(() => {
+    try {
+      return JSON.parse(londonOutcodesGeoJsonRaw);
+    } catch {
+      return null;
+    }
+  }, []);
 
   const handleSelectPostcode = (postcode) => {
     setSelected(postcode);
@@ -892,6 +911,63 @@ function ExplorePage() {
       .sort((a,b) => b.score - a.score),
     [apiPostcodes, weights]
   );
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !window.google || !boundariesGeoJson) return;
+
+    const rankedByCode = new Map(ranked.map((p, i) => [p.code, { ...p, rank: i }]));
+    const rankedCodes = ranked.map(p => p.code);
+
+    const resolveTrackedCode = (rawCode) => {
+      const district = normalizeCode(rawCode);
+      if (!district) return null;
+      if (rankedByCode.has(district)) return district;
+
+      const outcode = toAreaOutcode(district);
+      if (outcode && rankedByCode.has(outcode)) return outcode;
+
+      const areaPrefix = district.match(/^([A-Z]{1,2})/)?.[1] ?? "";
+      if (!areaPrefix) return null;
+
+      const candidates = rankedCodes.filter(c => c.startsWith(areaPrefix));
+      return candidates.length ? candidates[0] : null;
+    };
+
+    map.data.forEach((feature) => map.data.remove(feature));
+    map.data.addGeoJson(boundariesGeoJson);
+
+    map.data.setStyle((feature) => {
+      const districtName = normalizeCode(feature.getProperty("name"));
+      const trackedCode = resolveTrackedCode(districtName);
+      const item = trackedCode ? rankedByCode.get(trackedCode) : null;
+      const normalizedRank = item
+        ? (ranked.length <= 1 ? 1 : 1 - (item.rank / (ranked.length - 1)))
+        : 0;
+
+      return {
+        fillColor: item ? normalizedToColor(normalizedRank, 0.22) : "rgba(140, 140, 140, 0.08)",
+        fillOpacity: 1,
+        strokeColor: item ? normalizedToColor(normalizedRank, 0.75) : "rgba(140, 140, 140, 0.35)",
+        strokeWeight: 1,
+        clickable: true,
+      };
+    });
+
+    if (boundaryClickListenerRef.current) {
+      window.google.maps.event.removeListener(boundaryClickListenerRef.current);
+    }
+
+    boundaryClickListenerRef.current = map.data.addListener("click", (event) => {
+      const districtName = normalizeCode(event.feature.getProperty("name"));
+      const trackedCode = resolveTrackedCode(districtName);
+      if (!trackedCode) return;
+      const postcode = ranked.find(p => p.code === trackedCode);
+      if (postcode) {
+        handleSelectPostcode(postcode);
+      }
+    });
+  }, [boundariesGeoJson, ranked]);
 
   const selectedData = selected ? ranked.find(r => r.code === selected.code) : null;
   const selectedHighlight = selected ? HIGHLIGHTS.find(h => h.code === selected.code) : null;
