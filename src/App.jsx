@@ -688,147 +688,354 @@ function HomePage({ onNavigate }) {
 function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
-  const [selectedPin, setSelectedPin] = useState(null);
-  const [hovered, setHovered] = useState(null);
   const [apiPostcodes, setApiPostcodes] = useState(ALL_POSTCODE_DATA);
-  const [mapFactor, setMapFactor] = useState("rent");
-  const [mapZoom, setMapZoom] = useState(1);
-  const mapCanvasRef = useRef(null);
-  const MAP_W = 660; const MAP_H = 720;
 
   useEffect(() => {
-    (async () => {
+    async function load() {
       const results = await Promise.all(POSTCODES.map(c => fetchPostcodeData(c)));
       const valid = results.filter(Boolean);
       if (valid.length > 0) {
-        const merged = POSTCODES.map(code => valid.find(p => p.code === code) || getPostcodeRecord(code));
-        setApiPostcodes(merged);
+        const fullSet = POSTCODES.map(code => valid.find(p => p.code === code) || getPostcodeRecord(code));
+        setApiPostcodes(fullSet);
       }
-    })();
+    }
+    load();
   }, []);
 
-  const ranked = useMemo(() => apiPostcodes.map(p => ({ ...p, score: computeScore(p, weights) })).sort((a,b) => b.score - a.score), [apiPostcodes, weights]);
-  const activeCodex = selectedPin || selected;
+  const ranked = [...apiPostcodes]
+    .map(p => ({ ...p, score: computeScore(p, weights) }))
+    .sort((a,b) => b.score - a.score);
 
-  const projectToMap = (code) => {
-    const coords = getPostcodeCoords(code);
-    const x = (coords[0] / 600) * MAP_W;
-    const y = (coords[1] / 700) * MAP_H;
-    return [x, y];
-  };
-
-  useEffect(() => {
-    const canvas = mapCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = MAP_W * dpr; canvas.height = MAP_H * dpr;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.clearRect(0,0,MAP_W,MAP_H);
-
-    ranked.forEach(p => {
-      const [cx, cy] = projectToMap(p.code);
-      const score = p[mapFactor] ?? 0;
-      const rad = 50;
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
-      grad.addColorStop(0, scoreToColor(score, 0.74));
-      grad.addColorStop(0.42, scoreToColor(score, 0.32));
-      grad.addColorStop(1, scoreToColor(score, 0));
-      ctx.beginPath(); ctx.arc(cx,cy,rad,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
-    });
-
-    ranked.forEach(p => {
-      const [cx, cy] = projectToMap(p.code);
-      const score = p.score;
-      const isSelected = activeCodex?.code === p.code;
-      const isHovered = hovered?.code === p.code;
-      const dot = isHovered || isSelected ? 10 : 6;
-      ctx.beginPath(); ctx.arc(cx, cy, dot, 0, Math.PI*2);
-      ctx.fillStyle = scoreToColor(score, 1); ctx.fill();
-      if (isHovered || isSelected) { ctx.beginPath(); ctx.arc(cx, cy, dot+3, 0, Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=2; ctx.stroke(); }
-    });
-  }, [ranked, mapFactor, hovered, activeCodex]);
-
-  const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=51.5074,-0.1278&zoom=${Math.round(11 + (mapZoom - 1) * 3)}&size=${MAP_W}x${MAP_H}&maptype=roadmap&style=feature:poi.business|visibility:off&style=feature:transit|visibility:off&key=AIzaSyAqfkMetA3fF6rxe-Up3QqStJtqaq8XrPw`;
-
-  const toMapPos = (e) => {
-    const canvas = mapCanvasRef.current; if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * MAP_W;
-    const y = ((e.clientY - rect.top) / rect.height) * MAP_H;
-    return [x, y];
-  };
-
-  const hit = (x,y) => {
-    let closest = null; let minDist = Infinity;
-    ranked.forEach(p => {
-      const [cx, cy] = projectToMap(p.code);
-      const d = Math.hypot(cx-x, cy-y);
-      if (d < 18 && d < minDist) { closest = p; minDist = d; }
-    });
-    return closest;
-  };
+  const selectedData = selected ? ranked.find(r => r.code === selected.code) : null;
+  const selectedHighlight = selected ? HIGHLIGHTS.find(h => h.code === selected.code) : null;
 
   return (
-    <div className="page">
+    <div className="page" style={{paddingTop:'var(--nav-h)'}}>
       <div className="explore-layout">
         <div className="explore-sidebar">
-          <div className="sidebar-top"><div className="sidebar-title">Customize weights</div><div className="sidebar-sub">See immediate heatmap updates.</div></div>
+          <div className="sidebar-top">
+            <div className="sidebar-title">Personalise</div>
+            <div className="sidebar-sub">Drag sliders to weight what matters to you</div>
+          </div>
+
           <div className="weights-section">
+            <div className="weights-label">Your priorities</div>
             {FACTORS.map(f => (
               <div className="weight-row" key={f.id}>
-                <div className="weight-row-top"><span className="weight-name">{f.label}</span><span className="weight-val">{weights[f.id]}/10</span></div>
-                <input type="range" min={0} max={10} step={1} value={weights[f.id]} onChange={e=>setWeights(s=>({...s,[f.id]:+e.target.value}))} style={{accentColor:f.color}} />
+                <div className="weight-row-top">
+                  <span className="weight-name">{f.label}</span>
+                  <span className="weight-val">{weights[f.id]}/10</span>
+                </div>
+                <input
+                  type="range" min={0} max={10} step={1}
+                  value={weights[f.id]}
+                  onChange={e => setWeights(w => ({...w, [f.id]: +e.target.value}))}
+                  style={{accentColor: f.color}}
+                />
               </div>
             ))}
           </div>
+
           <div className="results-section">
-            <div className="results-label">Top postcodes</div>
-            {ranked.slice(0,18).map((p,i)=>(
-              <button key={p.code} className={`result-card${activeCodex?.code===p.code?' selected':''}`} onClick={()=>{setSelected(p);setSelectedPin(p);}}>
-                <div className={`result-rank${i<3?' top':''}`}>{i+1}</div>
-                <div className="result-info"><div className="result-code">{p.code}</div><div className="result-area">{p.area}</div></div>
-                <div className="result-score-wrap"><div className="result-score">{p.score}</div><div className="score-bar-bg"><div className="score-bar-fill" style={{width:`${p.score}%`, background:scoreToColor(p.score,0.9)}} /></div></div>
-              </button>
+            <div className="results-label">Ranked postcodes</div>
+            {ranked.map((p, i) => (
+              <div
+                key={p.code}
+                className={`result-card${selected?.code === p.code ? " selected" : ""}`}
+                onClick={() => setSelected(p)}
+              >
+                <div className={`result-rank${i < 3 ? " top" : ""}`}>{i+1}</div>
+                <div className="result-info">
+                  <div className="result-code">{p.code}</div>
+                  <div className="result-area">{p.area}</div>
+                </div>
+                <div className="result-score-wrap">
+                  <div className="result-score">{p.score}</div>
+                  <div className="score-bar-bg">
+                    <div className="score-bar-fill" style={{width:`${p.score}%`}}></div>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
 
-        <div className="detail-panel" style={{flex:1, margin:'16px', border:'1px solid #dde6f0', borderRadius:'12px', padding:'12px', minHeight:'calc(100vh - 96px)'}}>
-          <div className="map-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
-            <div style={{fontWeight:700}}>Google map + overlay</div>
-            <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
-              <select value={mapFactor} onChange={e=>setMapFactor(e.target.value)} style={{padding:'4px 7px', borderRadius:'8px', border:'1px solid #c8d2dc'}}>{FACTORS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</select>
-              <button onClick={()=>setMapZoom(z=>Math.min(1.8,z+0.1))} style={{padding:'5px 8px',borderRadius:'8px'}}>Zoom +</button>
-              <button onClick={()=>setMapZoom(z=>Math.max(0.8,z-0.1))} style={{padding:'5px 8px',borderRadius:'8px'}}>Zoom -</button>
+        <div className="detail-panel">
+          {!selectedData ? (
+            <div className="empty-state">
+              <div className="empty-icon">◉</div>
+              <div className="empty-text">
+                Select a postcode from the list<br/>to see a detailed breakdown
+              </div>
             </div>
-          </div>
-          <div className="map-body" style={{position:'relative', width:'660px', height:'720px', margin:'auto', overflow:'hidden', border:'1px solid #cfdae8', borderRadius:'12px'}} onWheel={e=>{e.preventDefault();setMapZoom(z=>Math.max(0.8,Math.min(1.8,z+(e.deltaY<0?0.06:-0.06))));}}>
-            <div className="map-wrapper" style={{position:'absolute', top:'50%', left:'50%', width:'660px', height:'720px', transform:`translate(-50%, -50%) scale(${mapZoom})`, transformOrigin:'center'}}>
-              <img className="map-snapshot" src={mapUrl} alt="Google map snapshot" style={{width:'660px',height:'720px',display:'block'}} />
-              <canvas ref={mapCanvasRef} className="map-canvas" width={660} height={720} style={{position:'absolute',top:0,left:0}} onMouseMove={e=>{const pos=toMapPos(e); if(!pos)return; setHovered(hit(...pos));}} onMouseLeave={()=>setHovered(null)} onClick={e=>{const pos=toMapPos(e); if(!pos)return; const found=hit(...pos); if(found){setSelected(found); setSelectedPin(found);}}}/>
-            </div>
-          </div>
-
-          {!activeCodex ? (
-            <div className="empty-state" style={{marginTop:16}}><div className="empty-icon">📍</div><div className="empty-text">Click a postcode dot on the map to see details here.</div></div>
           ) : (
-            <div style={{marginTop:16}}>
-              <div className="detail-hero"><div className="detail-tag">{activeCodex.code}</div><div className="detail-postcode" style={{fontSize:'2rem'}}>{activeCodex.code}</div><div className="detail-area-name">{activeCodex.area}</div><div className="detail-score-row"><div className="detail-score-big">{activeCodex.score}</div><div className="detail-score-label">/100</div></div><div className="detail-verdict">{getVerdict(activeCodex.score)}</div><button className="back-button" onClick={()=>setSelectedPin(null)}>Back to heatmap</button></div>
+            <div style={{animation:'fadeUp 0.35s ease both'}}>
+              <div className="detail-hero">
+                <div className="detail-tag">
+                  Ranked #{ranked.indexOf(selectedData)+1} of {ranked.length}
+                </div>
+                <div className="detail-postcode">{selectedData.code}</div>
+                <div className="detail-area-name">{selectedData.area}</div>
+                <div className="detail-score-row">
+                  <div className="detail-score-big">{selectedData.score}</div>
+                  <div className="detail-score-label">/ 100<br/>overall score</div>
+                </div>
+                <div className="detail-verdict">{getVerdict(selectedData.score)}</div>
+
+                {selectedHighlight && (
+                  <div className="highlights-grid" style={{marginTop:28}}>
+                    <div className="highlight-card">
+                      <div className="highlight-label">Avg monthly rent</div>
+                      <div className="highlight-val">{selectedHighlight.avgRent}</div>
+                      <div className="highlight-sub">1-bed flat estimate</div>
+                    </div>
+                    <div className="highlight-card">
+                      <div className="highlight-label">Commute to Zone 1</div>
+                      <div className="highlight-val">{selectedHighlight.commute}</div>
+                      <div className="highlight-sub">average transit time</div>
+                    </div>
+                    <div className="highlight-card">
+                      <div className="highlight-label">Nearby venues</div>
+                      <div className="highlight-val">{selectedHighlight.bars}</div>
+                      <div className="highlight-sub">bars & restaurants</div>
+                    </div>
+                    <div className="highlight-card">
+                      <div className="highlight-label">Vibe</div>
+                      <div className="highlight-val" style={{fontSize:16,paddingTop:4}}>
+                        {selectedData.score >= 80 ? "🔥 Very lively" : selectedData.score >= 70 ? "✨ Buzzing" : selectedData.score >= 60 ? "😌 Relaxed" : "🌿 Quiet"}
+                      </div>
+                      <div className="highlight-sub">based on your weights</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="detail-body">
-                <div className="factor-breakdown-title">Ranked factors</div>
-                {FACTORS.map(f=>(
-                  <div className="factor-row" key={f.id}><div className="factor-row-top"><span className="factor-row-name">{f.label}</span><span className="factor-row-score">{activeCodex[f.id]}</span></div><div className="factor-track"><div className="factor-fill" style={{width:`${activeCodex[f.id]}%`, background:f.color}}/></div></div>
+                <div className="factor-breakdown-title">Factor breakdown</div>
+                {FACTORS.map(f => (
+                  <div className="factor-row" key={f.id}>
+                    <div className="factor-row-top">
+                      <span className="factor-row-name">{f.label}</span>
+                      <span className="factor-row-score">{selectedData[f.id]}</span>
+                    </div>
+                    <div className="factor-track">
+                      <div className="factor-fill" style={{
+                        width:`${selectedData[f.id]}%`,
+                        background: f.color
+                      }}></div>
+                    </div>
+                  </div>
                 ))}
-                <div className="tag-row" style={{marginTop:'12px'}}>
-                  {FACTORS.filter(f=>activeCodex[f.id]>=80).map(f=><span key={`g-${f.id}`} className="tag good">Strong {f.label.toLowerCase()}</span>)}
-                  {FACTORS.filter(f=>activeCodex[f.id]>=60&&activeCodex[f.id]<80).map(f=><span key={`m-${f.id}`} className="tag warn">Good {f.label.toLowerCase()}</span>)}
-                  {FACTORS.filter(f=>activeCodex[f.id]<45).map(f=><span key={`l-${f.id}`} className="tag bad">Low {f.label.toLowerCase()}</span>)}
+
+                <div style={{marginTop:32}}>
+                  <div className="factor-breakdown-title">Standout traits</div>
+                  <div className="tag-row">
+                    {FACTORS
+                      .filter(f => selectedData[f.id] >= 80)
+                      .map(f => <span key={f.id} className="tag good">Strong {f.label.toLowerCase()}</span>)}
+                    {FACTORS
+                      .filter(f => selectedData[f.id] >= 60 && selectedData[f.id] < 80)
+                      .map(f => <span key={f.id} className="tag warn">Decent {f.label.toLowerCase()}</span>)}
+                    {FACTORS
+                      .filter(f => selectedData[f.id] < 45)
+                      .map(f => <span key={f.id} className="tag bad">Limited {f.label.toLowerCase()}</span>)}
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── HEATMAP PAGE ──────────────────────────────────────────────────────────────
+
+function HeatmapPage() {
+  const [activeFactor, setActiveFactor] = useState("rent");
+  const [hovered, setHovered] = useState(null);
+  const canvasRef = useRef(null);
+  const W = 600, H = 700;
+
+  const factor = FACTORS.find(f => f.id === activeFactor);
+
+  // Draw heatmap whenever factor changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = "#F7F4EF";
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw a soft radial blob per postcode
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
+      const score = p[activeFactor];
+      const radius = 52;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      grad.addColorStop(0,   scoreToColor(score, 0.55));
+      grad.addColorStop(0.5, scoreToColor(score, 0.28));
+      grad.addColorStop(1,   scoreToColor(score, 0));
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    // Draw dot + label per postcode
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
+      const score = p[activeFactor];
+      const isHovered = hovered?.code === p.code;
+      const dotR = isHovered ? 9 : 6;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = scoreToColor(score, 1);
+      ctx.fill();
+
+      if (isHovered) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = scoreToColor(score, 0.4);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.font = isHovered ? "500 12px 'DM Sans', sans-serif" : "300 11px 'DM Sans', sans-serif";
+      ctx.fillStyle = isHovered ? "#2C2924" : "#A09890";
+      ctx.textAlign = "center";
+      ctx.fillText(p.code, cx, cy + dotR + 13);
+    });
+
+    // Thames suggestion — a faint arc across the bottom third
+    ctx.beginPath();
+    ctx.moveTo(220, 355);
+    ctx.bezierCurveTo(280, 370, 360, 375, 420, 360);
+    ctx.strokeStyle = "rgba(138,158,140,0.15)";
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+  }, [activeFactor, hovered]);
+
+  function handleMouseMove(e) {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top)  * scaleY;
+
+    let closest = null, closestD = Infinity;
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodeCoords(p.code);
+      const d = Math.hypot(cx - mx, cy - my);
+      if (d < 30 && d < closestD) { closest = p; closestD = d; }
+    });
+    setHovered(closest);
+  }
+
+  function handleMouseLeave() { setHovered(null); }
+
+  const factorIcon = { rent:"£", nightlife:"◈", transport:"⟳", greenery:"◉", age:"◆", culture:"▲" };
+  const scaleGradient = `linear-gradient(to right, ${scoreToColor(0)}, ${scoreToColor(50)}, ${scoreToColor(100)})`;
+
+  return (
+    <div className="page" style={{paddingTop:"var(--nav-h)"}}>
+      <div className="heatmap-layout">
+
+        {/* ── Sidebar ── */}
+        <div className="heatmap-sidebar">
+          <div className="sidebar-top">
+            <div className="sidebar-title">Heatmap</div>
+            <div className="sidebar-sub">Select a factor to visualise across London</div>
+          </div>
+
+          {FACTORS.map(f => (
+            <button
+              key={f.id}
+              className={`heatmap-factor-btn${activeFactor === f.id ? " active" : ""}`}
+              onClick={() => setActiveFactor(f.id)}
+            >
+              <div className="heatmap-factor-icon" style={{background: f.bg, color: f.color}}>
+                {factorIcon[f.id]}
+              </div>
+              <div>
+                <div className="heatmap-factor-label">{f.label}</div>
+                <div className="heatmap-factor-sub">
+                  {f.id==="rent"      && "Affordability vs salary"}
+                  {f.id==="nightlife" && "Bars, clubs & restaurants"}
+                  {f.id==="transport" && "Tube, rail & bus links"}
+                  {f.id==="greenery"  && "Parks & green space"}
+                  {f.id==="age"       && "20–34 year old residents"}
+                  {f.id==="culture"   && "Arts, markets & food"}
+                </div>
+              </div>
+            </button>
+          ))}
+
+          <div className="heatmap-legend">
+            <div className="heatmap-legend-label">Score scale</div>
+            <div className="heatmap-scale" style={{background: scaleGradient}}></div>
+            <div className="heatmap-scale-ends">
+              <span>Lower</span>
+              <span>Higher</span>
+            </div>
+          </div>
+
+          <div className="heatmap-tooltip-section">
+            {!hovered ? (
+              <div className="heatmap-tooltip-empty">
+                Hover over a postcode on the map to see its score
+              </div>
+            ) : (
+              <div style={{animation:"fadeUp 0.2s ease both"}}>
+                <div className="heatmap-tooltip-code">{hovered.code}</div>
+                <div className="heatmap-tooltip-area">{hovered.area}</div>
+                <div className="heatmap-tooltip-score-row">
+                  <div className="heatmap-tooltip-score" style={{color: scoreToColor(hovered[activeFactor], 1)}}>
+                    {hovered[activeFactor]}
+                  </div>
+                  <div className="heatmap-tooltip-score-label">/ 100<br/>{factor.label.toLowerCase()}</div>
+                </div>
+                <div className="heatmap-tooltip-verdict">{getVerdict(hovered[activeFactor])}</div>
+                <div style={{marginTop:12}}>
+                  <div className="factor-breakdown-title" style={{marginBottom:10}}>All factors</div>
+                  <div className="heatmap-mini-factors">
+                    {FACTORS.map(f => (
+                      <div className="heatmap-mini-row" key={f.id}>
+                        <div className="heatmap-mini-name">{f.label}</div>
+                        <div className="heatmap-mini-track">
+                          <div className="heatmap-mini-fill" style={{width:`${hovered[f.id]}%`, background: f.color}}></div>
+                        </div>
+                        <div className="heatmap-mini-val">{hovered[f.id]}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Canvas ── */}
+        <div className="heatmap-canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            width={W}
+            height={H}
+            style={{width: Math.min(W, "100%"), maxWidth: W}}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+          />
+        </div>
+
       </div>
     </div>
   );
@@ -909,7 +1116,7 @@ export default function App() {
           Grad<span>Living</span>
         </div>
         <div className="nav-links">
-          {[["home","Home"],["explore","Explore"],["about","About"]].map(([id,label]) => (
+          {[["home","Home"],["explore","Explore"],["heatmap","Heatmap"],["about","About"]].map(([id,label]) => (
             <button
               key={id}
               className={`nav-link${page===id?" active":""}`}
@@ -922,6 +1129,7 @@ export default function App() {
       <div key={pageKey}>
         {page==="home"    && <HomePage    onNavigate={navigate} />}
         {page==="explore" && <ExplorePage />}
+        {page==="heatmap" && <HeatmapPage />}
         {page==="about"   && <AboutPage   />}
       </div>
     </>
