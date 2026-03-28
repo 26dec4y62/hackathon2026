@@ -777,6 +777,11 @@ function ExplorePage() {
     setSelected(postcode);
   };
 
+  // Clear selection when weights change
+  useEffect(() => {
+    setSelected(null);
+  }, [weights]);
+
   // Load Google Maps script
   useEffect(() => {
     if (window.google?.maps) {
