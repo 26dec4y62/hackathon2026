@@ -9,6 +9,23 @@ export const LONDON_POSTCODES = [
   "WC1","WC2"
 ];
 
+// Parse postcodes CSV
+import postcodesCsv from './postcodes.csv?raw';
+
+function parsePostcodesCsv() {
+  const lines = postcodesCsv.trim().split('\n');
+  const map = {};
+  for (let i = 1; i < lines.length; i++) {
+    const [id, postcode, lat, lng] = lines[i].split(',');
+    if (postcode && lat && lng) {
+      map[postcode.trim()] = [parseFloat(lat), parseFloat(lng)];
+    }
+  }
+  return map;
+}
+
+export const POSTCODE_COORDS_MAP = parsePostcodesCsv();
+
 const SCORES = {
   "E1": { rent:72, nightlife:88, transport:82, greenery:38, age:85, culture:90 },
   "E2": { rent:68, nightlife:80, transport:76, greenery:52, age:82, culture:78 },

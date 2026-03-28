@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { fetchPostcodeData, LONDON_POSTCODES } from "./data/fetchPostcodes";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { fetchPostcodeData, LONDON_POSTCODES, POSTCODE_COORDS_MAP } from "./data/fetchPostcodes";
 
 const POSTCODES = LONDON_POSTCODES;
 
@@ -493,12 +493,55 @@ function getPostcodeRecord(code) {
 
 const ALL_POSTCODE_DATA = POSTCODES.map(getPostcodeRecord);
 
-function getPostcodeCoords(code) {
-  if (POSTCODE_COORDS[code]) return POSTCODE_COORDS[code];
+// Mercator projection: convert lat/lng to canvas coordinates
+function mercatorProject(lat, lng) {
+  const x = (lng + 180) / 360;
+  const y = (1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2;
+  return [x, y];
+}
+
+// Get bounds of London postcodes from CSV data
+function getLondonBounds() {
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  // Only use postcodes in LONDON_POSTCODES list
+  POSTCODES.forEach(code => {
+    if (POSTCODE_COORDS_MAP[code]) {
+      const [lat, lng] = POSTCODE_COORDS_MAP[code];
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+    }
+  });
+  return { minLat, maxLat, minLng, maxLng };
+}
+
+const LONDON_BOUNDS = getLondonBounds();
+
+// Project postcode to canvas coordinates using real lat/lng
+function getPostcodeCoords(code, canvasW, canvasH) {
+  if (POSTCODE_COORDS_MAP[code]) {
+    const [lat, lng] = POSTCODE_COORDS_MAP[code];
+    const minProj = mercatorProject(LONDON_BOUNDS.minLat, LONDON_BOUNDS.minLng);
+    const maxProj = mercatorProject(LONDON_BOUNDS.maxLat, LONDON_BOUNDS.maxLng);
+    const coordProj = mercatorProject(lat, lng);
+    
+    // Add padding: 10% margin on each side
+    const padding = 0.1;
+    const width = maxProj[0] - minProj[0];
+    const height = maxProj[1] - minProj[1];
+    
+    const x = padding * canvasW + ((coordProj[0] - minProj[0]) / width) * (1 - 2 * padding) * canvasW;
+    // Invert Y: higher latitude = smaller Y on canvas (top)
+    const y = canvasH - (padding * canvasH + ((coordProj[1] - minProj[1]) / height) * (1 - 2 * padding) * canvasH);
+    
+    return [x, y];
+  }
+  // Fallback for postcodes not in CSV
   const idx = POSTCODES.indexOf(code);
   const angle = ((idx === -1 ? Math.random() : idx / POSTCODES.length) * Math.PI * 2);
   const radius = 70 + ((idx % 8) * 12);
-  return [300 + Math.cos(angle) * radius, 350 + Math.sin(angle) * radius];
+  return [canvasW / 2 + Math.cos(angle) * radius, canvasH / 2 + Math.sin(angle) * radius];
 }
 
 const FACTORS = [
@@ -873,7 +916,7 @@ function HeatmapPage() {
 
     // Draw a soft radial blob per postcode
     ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code);
+      const [cx, cy] = getPostcodeCoords(p.code, W, H);
       const score = p[activeFactor];
       const radius = 52;
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
@@ -888,7 +931,7 @@ function HeatmapPage() {
 
     // Draw dot + label per postcode
     ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code);
+      const [cx, cy] = getPostcodeCoords(p.code, W, H);
       const score = p[activeFactor];
       const isHovered = hovered?.code === p.code;
       const dotR = isHovered ? 9 : 6;
@@ -934,7 +977,7 @@ function HeatmapPage() {
 
     let closest = null, closestD = Infinity;
     ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code);
+      const [cx, cy] = getPostcodeCoords(p.code, W, H);
       const d = Math.hypot(cx - mx, cy - my);
       if (d < 30 && d < closestD) { closest = p; closestD = d; }
     });
