@@ -1311,9 +1311,9 @@ function AboutPage() {
         </div>
 
         <div className="about-section">
-          <h3>What's next</h3>
+          <h3>What's next?</h3>
           <p>
-            We're building AI-powered postcode summaries that describe the actual feel of each area in plain language — written by Claude, grounded in real data. We're also expanding to Manchester, Edinburgh, and Bristol.
+            We're upscaling to more post-grad destinations — NYC, LA and Chicago — to bring an easy transition to people across the world.
           </p>
         </div>
 
