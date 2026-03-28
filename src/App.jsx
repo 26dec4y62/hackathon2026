@@ -954,7 +954,7 @@ function ExplorePage() {
         fillColor: item ? normalizedToColor(normalizedRank, 0.22) : "rgba(140, 140, 140, 0.08)",
         fillOpacity: 0.7,
         strokeColor: item ? normalizedToColor(normalizedRank, 0.75) : "rgba(140, 140, 140, 0.35)",
-        strokeWeight: 1.5,
+        strokeWeight: 2,
         clickable: true,
       };
     });
