@@ -984,197 +984,6 @@ function ExplorePage() {
   );
 }
 
-// ── HEATMAP PAGE ──────────────────────────────────────────────────────────────
-
-function HeatmapPage() {
-  const [activeFactor, setActiveFactor] = useState("rent");
-  const [hovered, setHovered] = useState(null);
-  const canvasRef = useRef(null);
-  const W = 600, H = 700;
-
-  const factor = FACTORS.find(f => f.id === activeFactor);
-
-  // Draw heatmap whenever factor changes
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, W, H);
-
-    // Background
-    ctx.fillStyle = "#F7F4EF";
-    ctx.fillRect(0, 0, W, H);
-
-    // Draw a soft radial blob per postcode
-    ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code, W, H);
-      const score = p[activeFactor];
-      const radius = 52;
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0,   scoreToColor(score, 0.55));
-      grad.addColorStop(0.5, scoreToColor(score, 0.28));
-      grad.addColorStop(1,   scoreToColor(score, 0));
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    });
-
-    // Draw dot + label per postcode
-    ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code, W, H);
-      const score = p[activeFactor];
-      const isHovered = hovered?.code === p.code;
-      const dotR = isHovered ? 9 : 6;
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = scoreToColor(score, 1);
-      ctx.fill();
-
-      if (isHovered) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = scoreToColor(score, 0.4);
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      ctx.font = isHovered ? "500 12px 'DM Sans', sans-serif" : "300 11px 'DM Sans', sans-serif";
-      ctx.fillStyle = isHovered ? "#2C2924" : "#A09890";
-      ctx.textAlign = "center";
-      ctx.fillText(p.code, cx, cy + dotR + 13);
-    });
-
-    // Thames suggestion — a faint arc across the bottom third
-    ctx.beginPath();
-    ctx.moveTo(220, 355);
-    ctx.bezierCurveTo(280, 370, 360, 375, 420, 360);
-    ctx.strokeStyle = "rgba(138,158,140,0.15)";
-    ctx.lineWidth = 18;
-    ctx.lineCap = "round";
-    ctx.stroke();
-    ctx.lineWidth = 1;
-
-  }, [activeFactor, hovered]);
-
-  function handleMouseMove(e) {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const scaleY = H / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top)  * scaleY;
-
-    let closest = null, closestD = Infinity;
-    ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code, W, H);
-      const d = Math.hypot(cx - mx, cy - my);
-      if (d < 30 && d < closestD) { closest = p; closestD = d; }
-    });
-    setHovered(closest);
-  }
-
-  function handleMouseLeave() { setHovered(null); }
-
-  const factorIcon = { rent:"£", nightlife:"◈", transport:"⟳", greenery:"◉", age:"◆", culture:"▲" };
-  const scaleGradient = `linear-gradient(to right, ${scoreToColor(0)}, ${scoreToColor(50)}, ${scoreToColor(100)})`;
-
-  return (
-    <div className="page" style={{paddingTop:"var(--nav-h)"}}>
-      <div className="heatmap-layout">
-
-        {/* ── Sidebar ── */}
-        <div className="heatmap-sidebar">
-          <div className="sidebar-top">
-            <div className="sidebar-title">Heatmap</div>
-            <div className="sidebar-sub">Select a factor to visualise across London</div>
-          </div>
-
-          {FACTORS.map(f => (
-            <button
-              key={f.id}
-              className={`heatmap-factor-btn${activeFactor === f.id ? " active" : ""}`}
-              onClick={() => setActiveFactor(f.id)}
-            >
-              <div className="heatmap-factor-icon" style={{background: f.bg, color: f.color}}>
-                {factorIcon[f.id]}
-              </div>
-              <div>
-                <div className="heatmap-factor-label">{f.label}</div>
-                <div className="heatmap-factor-sub">
-                  {f.id==="rent"      && "Affordability vs salary"}
-                  {f.id==="nightlife" && "Bars, clubs & restaurants"}
-                  {f.id==="transport" && "Tube, rail & bus links"}
-                  {f.id==="greenery"  && "Parks & green space"}
-                  {f.id==="age"       && "20–34 year old residents"}
-                  {f.id==="culture"   && "Arts, markets & food"}
-                </div>
-              </div>
-            </button>
-          ))}
-
-          <div className="heatmap-legend">
-            <div className="heatmap-legend-label">Score scale</div>
-            <div className="heatmap-scale" style={{background: scaleGradient}}></div>
-            <div className="heatmap-scale-ends">
-              <span>Lower</span>
-              <span>Higher</span>
-            </div>
-          </div>
-
-          <div className="heatmap-tooltip-section">
-            {!hovered ? (
-              <div className="heatmap-tooltip-empty">
-                Hover over a postcode on the map to see its score
-              </div>
-            ) : (
-              <div style={{animation:"fadeUp 0.2s ease both"}}>
-                <div className="heatmap-tooltip-code">{hovered.code}</div>
-                <div className="heatmap-tooltip-area">{hovered.area}</div>
-                <div className="heatmap-tooltip-score-row">
-                  <div className="heatmap-tooltip-score" style={{color: scoreToColor(hovered[activeFactor], 1)}}>
-                    {hovered[activeFactor]}
-                  </div>
-                  <div className="heatmap-tooltip-score-label">/ 100<br/>{factor.label.toLowerCase()}</div>
-                </div>
-                <div className="heatmap-tooltip-verdict">{getVerdict(hovered[activeFactor])}</div>
-                <div style={{marginTop:12}}>
-                  <div className="factor-breakdown-title" style={{marginBottom:10}}>All factors</div>
-                  <div className="heatmap-mini-factors">
-                    {FACTORS.map(f => (
-                      <div className="heatmap-mini-row" key={f.id}>
-                        <div className="heatmap-mini-name">{f.label}</div>
-                        <div className="heatmap-mini-track">
-                          <div className="heatmap-mini-fill" style={{width:`${hovered[f.id]}%`, background: f.color}}></div>
-                        </div>
-                        <div className="heatmap-mini-val">{hovered[f.id]}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Canvas ── */}
-        <div className="heatmap-canvas-wrap">
-          <canvas
-            ref={canvasRef}
-            width={W}
-            height={H}
-            style={{width: Math.min(W, "100%"), maxWidth: W}}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-          />
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
 function AboutPage() {
   return (
     <div className="page">
@@ -1250,7 +1059,7 @@ export default function App() {
           Grad<span>Living</span>
         </div>
         <div className="nav-links">
-          {[["home","Home"],["explore","Explore"],["heatmap","Heatmap"],["about","About"]].map(([id,label]) => (
+          {[ ["home","Home"],["explore","Explore"],["about","About"] ].map(([id,label]) => (
             <button
               key={id}
               className={`nav-link${page===id?" active":""}`}
@@ -1263,7 +1072,6 @@ export default function App() {
       <div key={pageKey}>
         {page==="home"    && <HomePage    onNavigate={navigate} />}
         {page==="explore" && <ExplorePage />}
-        {page==="heatmap" && <HeatmapPage />}
         {page==="about"   && <AboutPage   />}
       </div>
     </>
