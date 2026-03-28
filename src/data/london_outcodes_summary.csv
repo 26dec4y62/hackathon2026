@@ -1,9 +1,0 @@
-outcode,features,source_url
-E,20,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/E.geojson
-EC,23,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/EC.geojson
-N,23,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/N.geojson
-NW,11,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/NW.geojson
-SE,28,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/SE.geojson
-SW,27,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/SW.geojson
-W,25,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/W.geojson
-WC,14,https://raw.githubusercontent.com/missinglink/uk-postcode-polygons/master/geojson/WC.geojson
