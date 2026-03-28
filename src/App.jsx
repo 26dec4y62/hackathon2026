@@ -761,7 +761,7 @@ function HomePage({ onNavigate }) {
         <div className="hero-left">
           <div className="hero-eyebrow">London Graduate Index</div>
           <h1 className="hero-title">
-            Where in London<br/><em>you</em><br/>should live
+            Where<br/><em>you</em><br/>should<br/>live
           </h1>
           <p className="hero-body">
             We synthesize your priorities to pinpoint the best postcode for you.
