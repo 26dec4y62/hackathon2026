@@ -1320,7 +1320,7 @@ function AboutPage() {
         <div style={{borderTop:'1px solid var(--stone)', paddingTop:40, marginTop:16}}>
           <div style={{fontSize:12, color:'var(--ink-faint)', lineHeight:1.8, fontWeight:300}}>
             Graduate Living Index is an independent tool. Not affiliated with any estate agent or letting platform.<br/>
-            © 2025 Graduate Living Index. London edition.
+            © 2026 Graduate Living Index. London edition.
           </div>
         </div>
       </div>
