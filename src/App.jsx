@@ -454,92 +454,6 @@ const style = `
     display: block;
     cursor: crosshair;
   }
-
-  /* ───────── LANDING SECTIONS ───────── */
-  .landing-section {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 40px;
-    text-align: center;
-  }
-
-  .landing-section.primary {
-    background: var(--cream);
-  }
-
-  .landing-section.secondary {
-    background: var(--warm-white);
-  }
-
-  .landing-section-content {
-    max-width: 700px;
-    margin: 0 auto;
-  }
-
-  .landing-section h2 {
-    font-family: 'DM Serif Display', serif;
-    font-size: clamp(36px, 5vw, 56px);
-    letter-spacing: -1px;
-    color: var(--ink);
-    margin-bottom: 32px;
-    line-height: 1.1;
-  }
-
-  .landing-section p {
-    font-size: 18px;
-    color: var(--ink-light);
-    line-height: 1.8;
-    margin-bottom: 24px;
-    font-weight: 300;
-  }
-
-  .landing-section-problems {
-    text-align: left;
-    background: var(--cream);
-  }
-
-  .landing-section-problems h3 {
-    font-family: 'DM Serif Display', serif;
-    font-size: 24px;
-    color: var(--ink);
-    margin-bottom: 12px;
-    margin-top: 20px;
-  }
-
-  .landing-section-problems h3:first-child {
-    margin-top: 0;
-  }
-
-  .landing-section-problems li {
-    font-size: 16px;
-    color: var(--ink-light);
-    line-height: 1.7;
-    margin-bottom: 16px;
-    font-weight: 300;
-    list-style: none;
-    padding-left: 24px;
-    position: relative;
-  }
-
-  .landing-section-problems li:before {
-    content: "→";
-    position: absolute;
-    left: 0;
-    color: var(--sage);
-  }
-
-  .section-cta {
-    display: flex;
-    gap: 16px;
-    margin-top: 48px;
-    justify-content: center;
-  }
-
-  .landing-section-problems .section-cta {
-    justify-content: flex-start;
-  }
 `;
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
@@ -745,59 +659,23 @@ function toAreaOutcode(code) {
 // ── PAGES ─────────────────────────────────────────────────────────────────────
 
 function HomePage({ onNavigate }) {
+  const previewItems = [
+    { code:"SW9", area:"Brixton", score:82 },
+    { code:"E8",  area:"Hackney", score:78 },
+    { code:"SE15",area:"Peckham", score:75 },
+  ];
   return (
     <div className="page">
-      {/* Hero Section */}
-      <div className="landing-section primary">
-        <div className="landing-section-content">
-          <h2>Where should you live?</h2>
-          <p>We synthesize your priorities to pinpoint the best postcode for you.</p>
-          <div className="section-cta">
-            <button className="btn-primary" onClick={() => onNavigate("explore")}>
-              Discover now →
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Research Problem Section */}
-      <div className="landing-section secondary">
-        <div className="landing-section-problems">
-          <h2>Researching where to live takes hours</h2>
-          <ul>
-            <li>Filtering through reviews</li>
-            <li>Googling dozens of different factors</li>
-            <li>Opening tab after tab</li>
-          </ul>
-          <div className="section-cta">
-            <button className="btn-primary" onClick={() => onNavigate("explore")}>
-              Let us handle it →
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Comparison Problem Section */}
-      <div className="landing-section primary">
-        <div className="landing-section-content">
-          <h3>Then you have to compare every factor.</h3>
-          <p style={{marginTop: '32px', marginBottom: '32px'}}>What's affordable might be too boring. What's lively might kill your commute. What's close to work might destroy your budget…</p>
-          <p style={{fontSize: '20px', fontWeight: '400', color: 'var(--ink)'}}>Too many factors to consider.</p>
-          <div className="section-cta">
-            <button className="btn-secondary" onClick={() => onNavigate("about")}>
-              Learn how we solve it
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Solution Section */}
-      <div className="landing-section secondary">
-        <div className="landing-section-content">
-          <h2>We fix that.</h2>
-          <p>With tailored location suggestions based on real live data, we make a complex process incredibly simple.</p>
-          <p style={{marginTop: '32px', fontSize: '16px', fontStyle: 'italic', color: 'var(--ink-light)'}}>Six weighted factors. Infinite combinations. One perfect postcode for you.</p>
-          <div className="section-cta">
+      <div className="hero">
+        <div className="hero-left">
+          <div className="hero-eyebrow">London Graduate Index</div>
+          <h1 className="hero-title">
+            Find your<br/><em>perfect</em><br/>London postcode
+          </h1>
+          <p className="hero-body">
+            We weigh rent, nightlife, transport, green space, and more — tuned to what matters to you — to rank every London postcode for life after graduation.
+          </p>
+          <div>
             <button className="btn-primary" onClick={() => onNavigate("explore")}>
               Start exploring →
             </button>
@@ -805,6 +683,65 @@ function HomePage({ onNavigate }) {
               How it works
             </button>
           </div>
+          <div className="ai-dot" style={{width:5,height:5,borderRadius:'50%',background:'var(--sage)',display:'inline-block',marginTop:32,marginRight:6,animation:'pulse 2s infinite'}}></div>
+          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 119 London postcodes</span>
+        </div>
+        <div className="hero-right">
+          <div className="hero-map-card">
+            <div className="card-label">Top rated right now</div>
+            <div className="mini-postcode-list">
+              {previewItems.map((item,i) => (
+                <div className="mini-postcode-item" key={item.code}>
+                  <div className="mini-rank">{i+1}</div>
+                  <div>
+                    <div className="mini-code">{item.code}</div>
+                    <div className="mini-area">{item.area}</div>
+                  </div>
+                  <div className="mini-score">{item.score}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-cell">
+          <div className="stat-num">119</div>
+          <div className="stat-label">London postcodes ranked</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-num">6</div>
+          <div className="stat-label">Weighted lifestyle factors</div>
+        </div>
+        <div className="stat-cell">
+          <div className="stat-num">∞</div>
+          <div className="stat-label">Personalisation combinations</div>
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="section-header">
+          <div className="section-eyebrow">What we measure</div>
+          <h2 className="section-title">Six factors, your weights</h2>
+        </div>
+        <div className="factors-grid">
+          {FACTORS.map(f => (
+            <div className="factor-card" key={f.id}>
+              <div className="factor-icon" style={{background:f.bg, color:f.color}}>
+                {f.id==="rent"?"£":f.id==="nightlife"?"◈":f.id==="transport"?"⟳":f.id==="greenery"?"◉":f.id==="age"?"◆":"▲"}
+              </div>
+              <div className="factor-name">{f.label}</div>
+              <div className="factor-desc">
+                {f.id==="rent" && "How affordable average rent is relative to a starting graduate salary."}
+                {f.id==="nightlife" && "Density of bars, clubs, restaurants and late-night venues."}
+                {f.id==="transport" && "Tube, Overground, bus and rail connections to central London."}
+                {f.id==="greenery" && "Parks, trees, canals and green space per capita in the area."}
+                {f.id==="age" && "Proportion of 20–34 year olds — who your neighbours will be."}
+                {f.id==="culture" && "Galleries, markets, independent food, live music and arts."}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
