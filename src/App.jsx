@@ -732,7 +732,28 @@ function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
   const [apiPostcodes, setApiPostcodes] = useState(ALL_POSTCODE_DATA);
+  const [scriptsLoaded, setScriptsLoaded] = useState(!!window.google);
+  const mapRef = useRef(null);
+  const markersRef = useRef({});
+  const mapInstanceRef = useRef(null);
 
+  // Load Google Maps script
+  useEffect(() => {
+    if (window.google) {
+      setScriptsLoaded(true);
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY || 'YOUR_GOOGLE_MAPS_KEY';
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.onload = () => setScriptsLoaded(true);
+    script.onerror = () => console.error('Failed to load Google Maps');
+    document.head.appendChild(script);
+  }, []);
+
+  // Initialize map and load postcode data
   useEffect(() => {
     async function load() {
       const results = await Promise.all(POSTCODES.map(c => fetchPostcodeData(c)));
@@ -745,9 +766,75 @@ function ExplorePage() {
     load();
   }, []);
 
-  const ranked = [...apiPostcodes]
-    .map(p => ({ ...p, score: computeScore(p, weights) }))
-    .sort((a,b) => b.score - a.score);
+  // Initialize Google Map
+  useEffect(() => {
+    if (!scriptsLoaded || !mapRef.current || mapInstanceRef.current) return;
+
+    const map = new window.google.maps.Map(mapRef.current, {
+      zoom: 12,
+      center: { lat: 51.5074, lng: -0.1278 },
+      styles: [
+        { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+      ],
+    });
+    mapInstanceRef.current = map;
+  }, [scriptsLoaded]);
+
+  // Update markers when weights or postcodes change
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return;
+
+    const ranked = [...apiPostcodes]
+      .map(p => ({ ...p, score: computeScore(p, weights) }))
+      .sort((a,b) => b.score - a.score);
+
+    // Clear old markers
+    Object.values(markersRef.current).forEach(marker => marker.setMap(null));
+    markersRef.current = {};
+
+    // Add new markers
+    ranked.forEach((postcode) => {
+      if (!POSTCODE_COORDS_MAP[postcode.code]) return;
+
+      const [lat, lng] = POSTCODE_COORDS_MAP[postcode.code];
+      const score = postcode.score;
+      const color = scoreToColor(score, 1); // Get RGB color
+
+      // Create SVG icon
+      const svgIcon = `
+        <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="shadow">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+            </filter>
+          </defs>
+          <circle cx="16" cy="16" r="12" fill="${color}" filter="url(#shadow)" opacity="0.9"/>
+          <circle cx="16" cy="16" r="10" fill="${color}" opacity="1"/>
+          <text x="16" y="18" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">${postcode.code}</text>
+        </svg>
+      `;
+
+      const marker = new window.google.maps.Marker({
+        position: { lat, lng },
+        map: mapInstanceRef.current,
+        icon: {
+          url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgIcon)}`,
+          scaledSize: new window.google.maps.Size(32, 32),
+        },
+        title: `${postcode.code} - ${postcode.area} (Score: ${score})`,
+      });
+
+      marker.addListener('click', () => setSelected(postcode));
+      markersRef.current[postcode.code] = marker;
+    });
+  }, [weights, apiPostcodes]);
+
+  const ranked = useMemo(() => 
+    [...apiPostcodes]
+      .map(p => ({ ...p, score: computeScore(p, weights) }))
+      .sort((a,b) => b.score - a.score),
+    [apiPostcodes, weights]
+  );
 
   const selectedData = selected ? ranked.find(r => r.code === selected.code) : null;
   const selectedHighlight = selected ? HIGHLIGHTS.find(h => h.code === selected.code) : null;
@@ -758,7 +845,7 @@ function ExplorePage() {
         <div className="explore-sidebar">
           <div className="sidebar-top">
             <div className="sidebar-title">Personalise</div>
-            <div className="sidebar-sub">Drag sliders to weight what matters to you</div>
+            <div className="sidebar-sub">Adjust weights to see heatmap update in real-time on the map</div>
           </div>
 
           <div className="weights-section">
@@ -803,90 +890,94 @@ function ExplorePage() {
           </div>
         </div>
 
-        <div className="detail-panel">
-          {!selectedData ? (
-            <div className="empty-state">
-              <div className="empty-icon">◉</div>
-              <div className="empty-text">
-                Select a postcode from the list<br/>to see a detailed breakdown
+        <div style={{flex: 1, display: 'flex', flexDirection: 'column', gap: '16px'}}>
+          <div ref={mapRef} style={{flex: 1, borderRadius: '8px', border: '1px solid var(--stone)', overflow: 'hidden'}} />
+          
+          <div className="detail-panel">
+            {!selectedData ? (
+              <div className="empty-state">
+                <div className="empty-icon">🗺️</div>
+                <div className="empty-text">
+                  Click a marker on the map<br/>to see postcode details
+                </div>
               </div>
-            </div>
-          ) : (
-            <div style={{animation:'fadeUp 0.35s ease both'}}>
-              <div className="detail-hero">
-                <div className="detail-tag">
-                  Ranked #{ranked.indexOf(selectedData)+1} of {ranked.length}
-                </div>
-                <div className="detail-postcode">{selectedData.code}</div>
-                <div className="detail-area-name">{selectedData.area}</div>
-                <div className="detail-score-row">
-                  <div className="detail-score-big">{selectedData.score}</div>
-                  <div className="detail-score-label">/ 100<br/>overall score</div>
-                </div>
-                <div className="detail-verdict">{getVerdict(selectedData.score)}</div>
+            ) : (
+              <div style={{animation:'fadeUp 0.35s ease both'}}>
+                <div className="detail-hero">
+                  <div className="detail-tag">
+                    Ranked #{ranked.indexOf(selectedData)+1} of {ranked.length}
+                  </div>
+                  <div className="detail-postcode">{selectedData.code}</div>
+                  <div className="detail-area-name">{selectedData.area}</div>
+                  <div className="detail-score-row">
+                    <div className="detail-score-big">{selectedData.score}</div>
+                    <div className="detail-score-label">/ 100<br/>overall score</div>
+                  </div>
+                  <div className="detail-verdict">{getVerdict(selectedData.score)}</div>
 
-                {selectedHighlight && (
-                  <div className="highlights-grid" style={{marginTop:28}}>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Avg monthly rent</div>
-                      <div className="highlight-val">{selectedHighlight.avgRent}</div>
-                      <div className="highlight-sub">1-bed flat estimate</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Commute to Zone 1</div>
-                      <div className="highlight-val">{selectedHighlight.commute}</div>
-                      <div className="highlight-sub">average transit time</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Nearby venues</div>
-                      <div className="highlight-val">{selectedHighlight.bars}</div>
-                      <div className="highlight-sub">bars & restaurants</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Vibe</div>
-                      <div className="highlight-val" style={{fontSize:16,paddingTop:4}}>
-                        {selectedData.score >= 80 ? "🔥 Very lively" : selectedData.score >= 70 ? "✨ Buzzing" : selectedData.score >= 60 ? "😌 Relaxed" : "🌿 Quiet"}
+                  {selectedHighlight && (
+                    <div className="highlights-grid" style={{marginTop:28}}>
+                      <div className="highlight-card">
+                        <div className="highlight-label">Avg monthly rent</div>
+                        <div className="highlight-val">{selectedHighlight.avgRent}</div>
+                        <div className="highlight-sub">1-bed flat estimate</div>
                       </div>
-                      <div className="highlight-sub">based on your weights</div>
+                      <div className="highlight-card">
+                        <div className="highlight-label">Commute to Zone 1</div>
+                        <div className="highlight-val">{selectedHighlight.commute}</div>
+                        <div className="highlight-sub">average transit time</div>
+                      </div>
+                      <div className="highlight-card">
+                        <div className="highlight-label">Nearby venues</div>
+                        <div className="highlight-val">{selectedHighlight.bars}</div>
+                        <div className="highlight-sub">bars & restaurants</div>
+                      </div>
+                      <div className="highlight-card">
+                        <div className="highlight-label">Vibe</div>
+                        <div className="highlight-val" style={{fontSize:16,paddingTop:4}}>
+                          {selectedData.score >= 80 ? "🔥 Very lively" : selectedData.score >= 70 ? "✨ Buzzing" : selectedData.score >= 60 ? "😌 Relaxed" : "🌿 Quiet"}
+                        </div>
+                        <div className="highlight-sub">based on your weights</div>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              <div className="detail-body">
-                <div className="factor-breakdown-title">Factor breakdown</div>
-                {FACTORS.map(f => (
-                  <div className="factor-row" key={f.id}>
-                    <div className="factor-row-top">
-                      <span className="factor-row-name">{f.label}</span>
-                      <span className="factor-row-score">{selectedData[f.id]}</span>
+                <div className="detail-body">
+                  <div className="factor-breakdown-title">Factor breakdown</div>
+                  {FACTORS.map(f => (
+                    <div className="factor-row" key={f.id}>
+                      <div className="factor-row-top">
+                        <span className="factor-row-name">{f.label}</span>
+                        <span className="factor-row-score">{selectedData[f.id]}</span>
+                      </div>
+                      <div className="factor-track">
+                        <div className="factor-fill" style={{
+                          width:`${selectedData[f.id]}%`,
+                          background: f.color
+                        }}></div>
+                      </div>
                     </div>
-                    <div className="factor-track">
-                      <div className="factor-fill" style={{
-                        width:`${selectedData[f.id]}%`,
-                        background: f.color
-                      }}></div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
 
-                <div style={{marginTop:32}}>
-                  <div className="factor-breakdown-title">Standout traits</div>
-                  <div className="tag-row">
-                    {FACTORS
-                      .filter(f => selectedData[f.id] >= 80)
-                      .map(f => <span key={f.id} className="tag good">Strong {f.label.toLowerCase()}</span>)}
-                    {FACTORS
-                      .filter(f => selectedData[f.id] >= 60 && selectedData[f.id] < 80)
-                      .map(f => <span key={f.id} className="tag warn">Decent {f.label.toLowerCase()}</span>)}
-                    {FACTORS
-                      .filter(f => selectedData[f.id] < 45)
-                      .map(f => <span key={f.id} className="tag bad">Limited {f.label.toLowerCase()}</span>)}
+                  <div style={{marginTop:32}}>
+                    <div className="factor-breakdown-title">Standout traits</div>
+                    <div className="tag-row">
+                      {FACTORS
+                        .filter(f => selectedData[f.id] >= 80)
+                        .map(f => <span key={f.id} className="tag good">Strong {f.label.toLowerCase()}</span>)}
+                      {FACTORS
+                        .filter(f => selectedData[f.id] >= 60 && selectedData[f.id] < 80)
+                        .map(f => <span key={f.id} className="tag warn">Decent {f.label.toLowerCase()}</span>)}
+                      {FACTORS
+                        .filter(f => selectedData[f.id] < 45)
+                        .map(f => <span key={f.id} className="tag bad">Limited {f.label.toLowerCase()}</span>)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
