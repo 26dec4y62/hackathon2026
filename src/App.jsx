@@ -698,7 +698,12 @@ function HomePage({ onNavigate }) {
 function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
+  const [selectedMapPin, setSelectedMapPin] = useState(null);
   const [apiPostcodes, setApiPostcodes] = useState(ALL_POSTCODE_DATA);
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapFactor, setMapFactor] = useState("rent");
+  const [hovered, setHovered] = useState(null);
+  const mapCanvasRef = useRef(null);
 
   useEffect(() => {
     async function load() {
@@ -717,10 +722,115 @@ function ExplorePage() {
     .sort((a,b) => b.score - a.score);
 
   const selectedData = selected ? ranked.find(r => r.code === selected.code) : null;
-  const selectedHighlight = selected ? HIGHLIGHTS.find(h => h.code === selected.code) : null;
+  const selectedMapData = selectedMapPin ? ranked.find(r => r.code === selectedMapPin.code) : null;
+  const detailData = selectedMapData || selectedData;
+
+  const W = 660, H = 720;
+
+  function getPostcodePoint(code) {
+    const latlng = POSTCODE_COORDS[code];
+    if (!latlng) return [0,0];
+    return projectLatLngToPoint(latlng, W, H);
+  }
+
+  useEffect(() => {
+    const canvas = mapCanvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodePoint(p.code);
+      const score = p[mapFactor] ?? 0;
+      const radius = 50;
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      grad.addColorStop(0, scoreToColor(score, 0.72));
+      grad.addColorStop(0.4, scoreToColor(score, 0.38));
+      grad.addColorStop(1, scoreToColor(score, 0));
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodePoint(p.code);
+      const score = computeScore(p, weights);
+      const isHovered = hovered?.code === p.code;
+      const isSelected = detailData?.code === p.code;
+      const dotR = (isHovered || isSelected) ? 9 : 6;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = scoreToColor(score, 1);
+      ctx.fill();
+
+      if (isHovered || isSelected) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = scoreToColor(score, 0.45);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.font = "500 12px 'DM Sans', sans-serif";
+      ctx.fillStyle = "#2C2924";
+      ctx.textAlign = "center";
+      ctx.fillText(p.code, cx, cy + dotR + 14);
+    });
+  }, [weights, mapFactor, hovered, detailData]);
+
+  const mapImageUrl = `https://maps.googleapis.com/maps/api/staticmap?center=51.5074,-0.1278&zoom=${Math.round(11 + (mapZoom - 1) * 4)}&size=660x720&maptype=roadmap&style=feature:poi.business|visibility:off&key=YOUR_GOOGLE_MAPS_KEY`;
+
+  function adjustPoint(clientX, clientY) {
+    const canvas = mapCanvasRef.current;
+    if (!canvas) return [0,0];
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left) / mapZoom;
+    const y = (clientY - rect.top) / mapZoom;
+    return [x, y];
+  }
+
+  function handleMapMouseMove(e) {
+    const [mx, my] = adjustPoint(e.clientX, e.clientY);
+    let closest = null, closestD = Infinity;
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodePoint(p.code);
+      const d = Math.hypot(cx - mx, cy - my);
+      if (d < 22 && d < closestD) { closest = p; closestD = d; }
+    });
+    setHovered(closest);
+  }
+
+  function handleMapMouseLeave() {
+    setHovered(null);
+  }
+
+  function handleMapClick(e) {
+    const [mx, my] = adjustPoint(e.clientX, e.clientY);
+    let closest = null, closestD = Infinity;
+    ALL_POSTCODE_DATA.forEach(p => {
+      const [cx, cy] = getPostcodePoint(p.code);
+      const d = Math.hypot(cx - mx, cy - my);
+      if (d < 18 && d < closestD) { closest = p; closestD = d; }
+    });
+    if (closest) {
+      setSelectedMapPin(closest);
+      setSelected(closest);
+    }
+  }
+
+  const mappedPostcode = detailData;
 
   return (
-    <div className="page" style={{paddingTop:'var(--nav-h)'}}>
+    <div className="page">
       <div className="explore-layout">
         <div className="explore-sidebar">
           <div className="sidebar-top">
@@ -752,7 +862,7 @@ function ExplorePage() {
               <div
                 key={p.code}
                 className={`result-card${selected?.code === p.code ? " selected" : ""}`}
-                onClick={() => setSelected(p)}
+                onClick={() => { setSelected(p); setSelectedMapPin(p); }}
               >
                 <div className={`result-rank${i < 3 ? " top" : ""}`}>{i+1}</div>
                 <div className="result-info">
@@ -762,7 +872,7 @@ function ExplorePage() {
                 <div className="result-score-wrap">
                   <div className="result-score">{p.score}</div>
                   <div className="score-bar-bg">
-                    <div className="score-bar-fill" style={{width:`${p.score}%`}}></div>
+                    <div className="score-bar-fill" style={{width:`${p.score}%`, background: scoreToColor(p.score, 0.95)}}></div>
                   </div>
                 </div>
               </div>
@@ -770,89 +880,79 @@ function ExplorePage() {
           </div>
         </div>
 
-        <div className="detail-panel">
-          {!selectedData ? (
-            <div className="empty-state">
-              <div className="empty-icon">◉</div>
-              <div className="empty-text">
-                Select a postcode from the list<br/>to see a detailed breakdown
+        <div className="map-pane">
+          <div className="map-card">
+            <div className="map-header">
+              <div className="map-title">Interactive London heatmap overlay</div>
+              <div className="map-hint">Mouse wheel zoom + click a postcode</div>
+            </div>
+            <div className="map-controls">
+              <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                <span style={{fontSize:12, color:'#5f6368'}}>Factor:</span>
+                <select value={mapFactor} onChange={e => setMapFactor(e.target.value)} style={{border:'1px solid var(--stone)', borderRadius:8, padding:'4px 8px'}}>
+                  {FACTORS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                </select>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                <button onClick={() => setMapZoom(z => Math.min(1.8, z + 0.1))}>Zoom in</button>
+                <button onClick={() => setMapZoom(z => Math.max(0.8, z - 0.1))}>Zoom out</button>
+                <span style={{fontSize:12, color:'#5f6368'}}>Zoom: {(mapZoom * 100).toFixed(0)}%</span>
               </div>
             </div>
-          ) : (
-            <div style={{animation:'fadeUp 0.35s ease both'}}>
-              <div className="detail-hero">
-                <div className="detail-tag">
-                  Ranked #{ranked.indexOf(selectedData)+1} of {ranked.length}
-                </div>
-                <div className="detail-postcode">{selectedData.code}</div>
-                <div className="detail-area-name">{selectedData.area}</div>
-                <div className="detail-score-row">
-                  <div className="detail-score-big">{selectedData.score}</div>
-                  <div className="detail-score-label">/ 100<br/>overall score</div>
-                </div>
-                <div className="detail-verdict">{getVerdict(selectedData.score)}</div>
-
-                {selectedHighlight && (
-                  <div className="highlights-grid" style={{marginTop:28}}>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Avg monthly rent</div>
-                      <div className="highlight-val">{selectedHighlight.avgRent}</div>
-                      <div className="highlight-sub">1-bed flat estimate</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Commute to Zone 1</div>
-                      <div className="highlight-val">{selectedHighlight.commute}</div>
-                      <div className="highlight-sub">average transit time</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Nearby venues</div>
-                      <div className="highlight-val">{selectedHighlight.bars}</div>
-                      <div className="highlight-sub">bars & restaurants</div>
-                    </div>
-                    <div className="highlight-card">
-                      <div className="highlight-label">Vibe</div>
-                      <div className="highlight-val" style={{fontSize:16,paddingTop:4}}>
-                        {selectedData.score >= 80 ? "🔥 Very lively" : selectedData.score >= 70 ? "✨ Buzzing" : selectedData.score >= 60 ? "😌 Relaxed" : "🌿 Quiet"}
-                      </div>
-                      <div className="highlight-sub">based on your weights</div>
-                    </div>
-                  </div>
-                )}
+            <div className="map-body">
+              <div className="map-wrapper" onWheel={(e) => { e.preventDefault(); setMapZoom(z => Math.max(0.8, Math.min(1.8, z + (e.deltaY < 0 ? 0.06 : -0.06)))); }} style={{transform:`scale(${mapZoom})`, transformOrigin:'center'}}>
+                <img className="map-snapshot" src={mapImageUrl} alt="London map" onError={(e) => { e.currentTarget.style.filter = 'blur(1px)'; }} />
+                <canvas
+                  ref={mapCanvasRef}
+                  className="map-canvas"
+                  width={W}
+                  height={H}
+                  onMouseMove={handleMapMouseMove}
+                  onMouseLeave={handleMapMouseLeave}
+                  onClick={handleMapClick}
+                />
               </div>
+            </div>
+          </div>
+        </div>
 
+        <div className="detail-panel">
+          {!mappedPostcode ? (
+            <div className="empty-state">
+              <div className="empty-icon">📍</div>
+              <div className="empty-text">Click a postcode dot on the map or select from the list to view details.</div>
+            </div>
+          ) : (
+            <>
+              <div className="detail-hero">
+                <div className="detail-tag">Heatmap detail</div>
+                <div className="detail-postcode">{mappedPostcode.code}</div>
+                <div className="detail-area-name">{mappedPostcode.area}</div>
+                <div className="detail-score-row">
+                  <div className="detail-score-big">{mappedPostcode.score}</div>
+                  <div className="detail-score-label">/ 100 overall score</div>
+                </div>
+                <div className="detail-verdict">{getVerdict(mappedPostcode.score)}</div>
+                <button className="back-button" onClick={() => setSelectedMapPin(null)}>Back to heatmap</button>
+              </div>
               <div className="detail-body">
                 <div className="factor-breakdown-title">Factor breakdown</div>
                 {FACTORS.map(f => (
                   <div className="factor-row" key={f.id}>
-                    <div className="factor-row-top">
-                      <span className="factor-row-name">{f.label}</span>
-                      <span className="factor-row-score">{selectedData[f.id]}</span>
-                    </div>
-                    <div className="factor-track">
-                      <div className="factor-fill" style={{
-                        width:`${selectedData[f.id]}%`,
-                        background: f.color
-                      }}></div>
-                    </div>
+                    <div className="factor-row-top"><span className="factor-row-name">{f.label}</span><span className="factor-row-score">{mappedPostcode[f.id]}</span></div>
+                    <div className="factor-track"><div className="factor-fill" style={{width:`${mappedPostcode[f.id]}%`, background:f.color}} /></div>
                   </div>
                 ))}
-
-                <div style={{marginTop:32}}>
+                <div style={{marginTop:22}}>
                   <div className="factor-breakdown-title">Standout traits</div>
                   <div className="tag-row">
-                    {FACTORS
-                      .filter(f => selectedData[f.id] >= 80)
-                      .map(f => <span key={f.id} className="tag good">Strong {f.label.toLowerCase()}</span>)}
-                    {FACTORS
-                      .filter(f => selectedData[f.id] >= 60 && selectedData[f.id] < 80)
-                      .map(f => <span key={f.id} className="tag warn">Decent {f.label.toLowerCase()}</span>)}
-                    {FACTORS
-                      .filter(f => selectedData[f.id] < 45)
-                      .map(f => <span key={f.id} className="tag bad">Limited {f.label.toLowerCase()}</span>)}
+                    {FACTORS.filter(f => mappedPostcode[f.id] >= 80).map(f => <span key={`${f.id}-good`} className="tag good">Strong {f.label.toLowerCase()}</span>)}
+                    {FACTORS.filter(f => mappedPostcode[f.id] >= 60 && mappedPostcode[f.id] < 80).map(f => <span key={`${f.id}-warn`} className="tag warn">Decent {f.label.toLowerCase()}</span>)}
+                    {FACTORS.filter(f => mappedPostcode[f.id] < 45).map(f => <span key={`${f.id}-bad`} className="tag bad">Limited {f.label.toLowerCase()}</span>)}
                   </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -860,43 +960,7 @@ function ExplorePage() {
   );
 }
 
-// ── HEATMAP PAGE ──────────────────────────────────────────────────────────────
-
-function HeatmapPage() {
-  const [activeFactor, setActiveFactor] = useState("rent");
-  const [hovered, setHovered] = useState(null);
-  const canvasRef = useRef(null);
-  const W = 600, H = 700;
-
-  const factor = FACTORS.find(f => f.id === activeFactor);
-
-  // Draw heatmap whenever factor changes
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, W, H);
-
-    // Background
-    ctx.fillStyle = "#F7F4EF";
-    ctx.fillRect(0, 0, W, H);
-
-    // Draw a soft radial blob per postcode
-    ALL_POSTCODE_DATA.forEach(p => {
-      const [cx, cy] = getPostcodeCoords(p.code);
-      const score = p[activeFactor];
-      const radius = 52;
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0,   scoreToColor(score, 0.55));
-      grad.addColorStop(0.5, scoreToColor(score, 0.28));
-      grad.addColorStop(1,   scoreToColor(score, 0));
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    });
-
-    // Draw dot + label per postcode
+function AboutPage() {
     ALL_POSTCODE_DATA.forEach(p => {
       const [cx, cy] = getPostcodeCoords(p.code);
       const score = p[activeFactor];
