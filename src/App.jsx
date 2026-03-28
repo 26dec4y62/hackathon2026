@@ -1126,7 +1126,7 @@ function ExplorePage() {
       <div className="explore-layout">
         <div className="explore-sidebar">
           <div className="sidebar-top">
-            <div className="sidebar-title">Personalise</div>
+            <div className="sidebar-title">The Big City made simple</div>
             <div className="sidebar-sub">Adjust weights to see heatmap update in real-time on the map</div>
           </div>
 
