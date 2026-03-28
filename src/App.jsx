@@ -254,7 +254,35 @@ const style = `
   .sidebar-sub { font-size: 13px; color: var(--ink-faint); font-weight: 300; }
 
   .weights-section { padding: 24px 28px; border-bottom: 1px solid var(--stone); }
-  .weights-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 16px; font-weight: 500; }
+  .weights-dropdown {
+    border: 1px solid var(--stone);
+    border-radius: 12px;
+    background: var(--warm-white);
+    padding: 0;
+  }
+  .weights-dropdown-summary {
+    cursor: pointer;
+    list-style: none;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    outline: none;
+  }
+  .weights-dropdown-summary::marker { display: none; }
+  .weights-dropdown summary::-webkit-details-marker { display: none; }
+  .weights-dropdown summary:after {
+    content: '▾';
+    font-size: 12px;
+    transition: transform 0.2s ease;
+  }
+  .weights-dropdown[open] summary:after { transform: rotate(180deg); }
+  .weights-content {
+    padding: 0 16px 16px;
+  }
   .weight-row { margin-bottom: 16px; }
   .weight-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .weight-name { font-size: 13px; color: var(--ink); font-weight: 400; }
@@ -1131,21 +1159,25 @@ function ExplorePage() {
           </div>
 
           <div className="weights-section">
-            <div className="weights-label">Your priorities</div>
-            {FACTORS.map(f => (
-              <div className="weight-row" key={f.id}>
-                <div className="weight-row-top">
-                  <span className="weight-name">{f.label}</span>
-                  <span className="weight-val">{weights[f.id]}/10</span>
-                </div>
-                <input
-                  type="range" min={0} max={10} step={1}
-                  value={weights[f.id]}
-                  onChange={e => setWeights(w => ({...w, [f.id]: +e.target.value}))}
-                  style={{accentColor: f.color}}
-                />
+            <details className="weights-dropdown" open>
+              <summary className="weights-dropdown-summary">Your priorities</summary>
+              <div className="weights-content">
+                {FACTORS.map(f => (
+                  <div className="weight-row" key={f.id}>
+                    <div className="weight-row-top">
+                      <span className="weight-name">{f.label}</span>
+                      <span className="weight-val">{weights[f.id]}/10</span>
+                    </div>
+                    <input
+                      type="range" min={0} max={10} step={1}
+                      value={weights[f.id]}
+                      onChange={e => setWeights(w => ({...w, [f.id]: +e.target.value}))}
+                      style={{accentColor: f.color}}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </details>
           </div>
 
           <div className="results-section">
