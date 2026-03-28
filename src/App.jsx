@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { fetchPostcodeData, LONDON_POSTCODES as ALL_POSTCODES } from "./data/fetchPostcodes";
 
 const style = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
@@ -377,6 +376,69 @@ const style = `
   .tag.good { background: var(--sage-pale); color: var(--sage); }
   .tag.warn { background: var(--gold-pale); color: #9A7340; }
   .tag.bad { background: var(--terracotta-pale); color: var(--terracotta); }
+
+  /* ───────── HEATMAP PAGE ───────── */
+  .heatmap-layout { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: calc(100vh - var(--nav-h)); }
+
+  .heatmap-sidebar {
+    border-right: 1px solid var(--stone);
+    display: flex; flex-direction: column;
+    background: var(--warm-white);
+    overflow-y: auto;
+  }
+
+  .heatmap-factor-btn {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    background: none; border: none; border-bottom: 1px solid var(--stone);
+    cursor: pointer; text-align: left; width: 100%;
+    transition: background 0.15s ease;
+  }
+  .heatmap-factor-btn:hover { background: var(--cream); }
+  .heatmap-factor-btn.active { background: var(--sage-pale); }
+  .heatmap-factor-icon {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .heatmap-factor-label { font-size: 13px; font-weight: 400; color: var(--ink); }
+  .heatmap-factor-sub { font-size: 11px; color: var(--ink-faint); font-weight: 300; margin-top: 1px; }
+  .heatmap-factor-btn.active .heatmap-factor-label { font-weight: 500; color: var(--ink); }
+
+  .heatmap-legend { padding: 24px 20px; border-bottom: 1px solid var(--stone); }
+  .heatmap-legend-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 12px; font-weight: 500; }
+  .heatmap-scale {
+    height: 8px; border-radius: 4px; margin-bottom: 6px;
+  }
+  .heatmap-scale-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-faint); font-weight: 300; }
+
+  .heatmap-tooltip-section { padding: 20px; flex: 1; }
+  .heatmap-tooltip-empty { font-size: 13px; color: var(--ink-faint); font-weight: 300; line-height: 1.6; }
+  .heatmap-tooltip-code { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--ink); letter-spacing: -1px; margin-bottom: 2px; }
+  .heatmap-tooltip-area { font-size: 12px; color: var(--ink-faint); font-weight: 300; margin-bottom: 14px; }
+  .heatmap-tooltip-score-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
+  .heatmap-tooltip-score { font-family: 'DM Serif Display', serif; font-size: 48px; color: var(--ink); line-height: 1; letter-spacing: -2px; }
+  .heatmap-tooltip-score-label { font-size: 13px; color: var(--ink-faint); font-weight: 300; }
+  .heatmap-tooltip-verdict { font-size: 12px; color: var(--terracotta); background: var(--terracotta-pale); padding: 4px 10px; border-radius: 20px; display: inline-block; margin-bottom: 16px; }
+  .heatmap-mini-factors { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .heatmap-mini-row { display: flex; align-items: center; gap: 8px; }
+  .heatmap-mini-name { font-size: 12px; color: var(--ink-faint); font-weight: 300; width: 100px; flex-shrink: 0; }
+  .heatmap-mini-track { flex: 1; height: 4px; background: var(--stone); border-radius: 2px; overflow: hidden; }
+  .heatmap-mini-fill { height: 4px; border-radius: 2px; transition: width 0.6s ease; }
+  .heatmap-mini-val { font-size: 11px; font-weight: 500; color: var(--ink); min-width: 24px; text-align: right; }
+
+  .heatmap-canvas-wrap {
+    background: var(--cream);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px;
+    overflow: auto;
+  }
+
+  .heatmap-canvas-wrap canvas {
+    border-radius: var(--radius);
+    border: 1px solid var(--stone);
+    display: block;
+    cursor: crosshair;
+  }
 `;
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
@@ -460,6 +522,21 @@ const HIGHLIGHTS = [
   { code:"WC1", avgRent:"£2,500",  commute:"8 min",   bars:44  },
 ];
 
+// Approximate canvas (x,y) positions for each postcode on a 600×700 London grid.
+// Origin top-left; West is left, North is up. Centre ≈ (300, 350).
+const POSTCODE_COORDS = {
+  "E1":  [348, 338], "E2":  [355, 320], "E3":  [375, 315],
+  "E8":  [355, 300], "E9":  [370, 305], "EC1": [320, 328],
+  "N1":  [315, 295], "N4":  [305, 265], "N5":  [295, 272],
+  "N6":  [285, 245], "N16": [322, 278], "NW1": [285, 295],
+  "NW3": [268, 268], "NW5": [278, 280], "NW6": [262, 290],
+  "SE1": [325, 358], "SE4": [345, 385], "SE5": [332, 375],
+  "SE8": [355, 370], "SE11":[318, 368], "SE15":[338, 390],
+  "SW4": [295, 385], "SW9": [308, 378], "SW11":[288, 375],
+  "W1":  [295, 328], "W11": [272, 320], "W12": [262, 330],
+  "WC1": [308, 325],
+};
+
 function computeScore(postcode, weights) {
   let total = 0, wSum = 0;
   FACTORS.forEach(f => {
@@ -472,6 +549,26 @@ function computeScore(postcode, weights) {
 
 function getVerdict(score) {
   return VERDICTS.find(v => score >= v.min)?.text ?? "";
+}
+
+// Interpolate between terracotta → gold → sage based on score 0–100
+function scoreToColor(score, alpha = 1) {
+  const t = Math.max(0, Math.min(100, score)) / 100;
+  let r, g, b;
+  if (t < 0.5) {
+    const f = t / 0.5;
+    // terracotta #C4795A → gold #C9A96E
+    r = Math.round(196 + f * (201 - 196));
+    g = Math.round(121 + f * (169 - 121));
+    b = Math.round(90  + f * (110 - 90));
+  } else {
+    const f = (t - 0.5) / 0.5;
+    // gold #C9A96E → sage #8A9E8C
+    r = Math.round(201 + f * (138 - 201));
+    g = Math.round(169 + f * (158 - 169));
+    b = Math.round(110 + f * (140 - 110));
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // ── PAGES ─────────────────────────────────────────────────────────────────────
@@ -574,23 +671,8 @@ function HomePage({ onNavigate }) {
 function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
-  const [apiPostcodes, setApiPostcodes] = useState(LONDON_POSTCODES);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-  setLoading(true);
-  async function loadPostcodes() {
-    const results = await Promise.all(
-      ALL_POSTCODES.map(code => fetchPostcodeData(code))
-    );
-    const valid = results.filter(Boolean);
-    if (valid.length > 0) setApiPostcodes(valid);
-    setLoading(false);
-  }
-  loadPostcodes();
-}, []);
-  
-  const ranked = [...apiPostcodes]
+  const ranked = [...LONDON_POSTCODES]
     .map(p => ({ ...p, score: computeScore(p, weights) }))
     .sort((a,b) => b.score - a.score);
 
@@ -738,6 +820,197 @@ function ExplorePage() {
   );
 }
 
+// ── HEATMAP PAGE ──────────────────────────────────────────────────────────────
+
+function HeatmapPage() {
+  const [activeFactor, setActiveFactor] = useState("rent");
+  const [hovered, setHovered] = useState(null);
+  const canvasRef = useRef(null);
+  const W = 600, H = 700;
+
+  const factor = FACTORS.find(f => f.id === activeFactor);
+
+  // Draw heatmap whenever factor changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = "#F7F4EF";
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw a soft radial blob per postcode
+    LONDON_POSTCODES.forEach(p => {
+      const [cx, cy] = POSTCODE_COORDS[p.code];
+      const score = p[activeFactor];
+      const radius = 52;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      grad.addColorStop(0,   scoreToColor(score, 0.55));
+      grad.addColorStop(0.5, scoreToColor(score, 0.28));
+      grad.addColorStop(1,   scoreToColor(score, 0));
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    // Draw dot + label per postcode
+    LONDON_POSTCODES.forEach(p => {
+      const [cx, cy] = POSTCODE_COORDS[p.code];
+      const score = p[activeFactor];
+      const isHovered = hovered?.code === p.code;
+      const dotR = isHovered ? 9 : 6;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = scoreToColor(score, 1);
+      ctx.fill();
+
+      if (isHovered) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = scoreToColor(score, 0.4);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.font = isHovered ? "500 12px 'DM Sans', sans-serif" : "300 11px 'DM Sans', sans-serif";
+      ctx.fillStyle = isHovered ? "#2C2924" : "#A09890";
+      ctx.textAlign = "center";
+      ctx.fillText(p.code, cx, cy + dotR + 13);
+    });
+
+    // Thames suggestion — a faint arc across the bottom third
+    ctx.beginPath();
+    ctx.moveTo(220, 355);
+    ctx.bezierCurveTo(280, 370, 360, 375, 420, 360);
+    ctx.strokeStyle = "rgba(138,158,140,0.15)";
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+  }, [activeFactor, hovered]);
+
+  function handleMouseMove(e) {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top)  * scaleY;
+
+    let closest = null, closestD = Infinity;
+    LONDON_POSTCODES.forEach(p => {
+      const [cx, cy] = POSTCODE_COORDS[p.code];
+      const d = Math.hypot(cx - mx, cy - my);
+      if (d < 30 && d < closestD) { closest = p; closestD = d; }
+    });
+    setHovered(closest);
+  }
+
+  function handleMouseLeave() { setHovered(null); }
+
+  const factorIcon = { rent:"£", nightlife:"◈", transport:"⟳", greenery:"◉", age:"◆", culture:"▲" };
+  const scaleGradient = `linear-gradient(to right, ${scoreToColor(0)}, ${scoreToColor(50)}, ${scoreToColor(100)})`;
+
+  return (
+    <div className="page" style={{paddingTop:"var(--nav-h)"}}>
+      <div className="heatmap-layout">
+
+        {/* ── Sidebar ── */}
+        <div className="heatmap-sidebar">
+          <div className="sidebar-top">
+            <div className="sidebar-title">Heatmap</div>
+            <div className="sidebar-sub">Select a factor to visualise across London</div>
+          </div>
+
+          {FACTORS.map(f => (
+            <button
+              key={f.id}
+              className={`heatmap-factor-btn${activeFactor === f.id ? " active" : ""}`}
+              onClick={() => setActiveFactor(f.id)}
+            >
+              <div className="heatmap-factor-icon" style={{background: f.bg, color: f.color}}>
+                {factorIcon[f.id]}
+              </div>
+              <div>
+                <div className="heatmap-factor-label">{f.label}</div>
+                <div className="heatmap-factor-sub">
+                  {f.id==="rent"      && "Affordability vs salary"}
+                  {f.id==="nightlife" && "Bars, clubs & restaurants"}
+                  {f.id==="transport" && "Tube, rail & bus links"}
+                  {f.id==="greenery"  && "Parks & green space"}
+                  {f.id==="age"       && "20–34 year old residents"}
+                  {f.id==="culture"   && "Arts, markets & food"}
+                </div>
+              </div>
+            </button>
+          ))}
+
+          <div className="heatmap-legend">
+            <div className="heatmap-legend-label">Score scale</div>
+            <div className="heatmap-scale" style={{background: scaleGradient}}></div>
+            <div className="heatmap-scale-ends">
+              <span>Lower</span>
+              <span>Higher</span>
+            </div>
+          </div>
+
+          <div className="heatmap-tooltip-section">
+            {!hovered ? (
+              <div className="heatmap-tooltip-empty">
+                Hover over a postcode on the map to see its score
+              </div>
+            ) : (
+              <div style={{animation:"fadeUp 0.2s ease both"}}>
+                <div className="heatmap-tooltip-code">{hovered.code}</div>
+                <div className="heatmap-tooltip-area">{hovered.area}</div>
+                <div className="heatmap-tooltip-score-row">
+                  <div className="heatmap-tooltip-score" style={{color: scoreToColor(hovered[activeFactor], 1)}}>
+                    {hovered[activeFactor]}
+                  </div>
+                  <div className="heatmap-tooltip-score-label">/ 100<br/>{factor.label.toLowerCase()}</div>
+                </div>
+                <div className="heatmap-tooltip-verdict">{getVerdict(hovered[activeFactor])}</div>
+                <div style={{marginTop:12}}>
+                  <div className="factor-breakdown-title" style={{marginBottom:10}}>All factors</div>
+                  <div className="heatmap-mini-factors">
+                    {FACTORS.map(f => (
+                      <div className="heatmap-mini-row" key={f.id}>
+                        <div className="heatmap-mini-name">{f.label}</div>
+                        <div className="heatmap-mini-track">
+                          <div className="heatmap-mini-fill" style={{width:`${hovered[f.id]}%`, background: f.color}}></div>
+                        </div>
+                        <div className="heatmap-mini-val">{hovered[f.id]}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Canvas ── */}
+        <div className="heatmap-canvas-wrap">
+          <canvas
+            ref={canvasRef}
+            width={W}
+            height={H}
+            style={{width: Math.min(W, "100%"), maxWidth: W}}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+          />
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 function AboutPage() {
   return (
     <div className="page">
@@ -813,7 +1086,7 @@ export default function App() {
           Grad<span>Living</span>
         </div>
         <div className="nav-links">
-          {[["home","Home"],["explore","Explore"],["about","About"]].map(([id,label]) => (
+          {[["home","Home"],["explore","Explore"],["heatmap","Heatmap"],["about","About"]].map(([id,label]) => (
             <button
               key={id}
               className={`nav-link${page===id?" active":""}`}
@@ -826,6 +1099,7 @@ export default function App() {
       <div key={pageKey}>
         {page==="home"    && <HomePage    onNavigate={navigate} />}
         {page==="explore" && <ExplorePage />}
+        {page==="heatmap" && <HeatmapPage />}
         {page==="about"   && <AboutPage   />}
       </div>
     </>
