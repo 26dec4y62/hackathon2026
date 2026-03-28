@@ -1345,7 +1345,7 @@ export default function App() {
       <style>{style}</style>
       <nav className="nav">
         <div className="nav-logo" onClick={() => navigate("home")} style={{cursor:'pointer'}}>
-          Grad<span>Living</span>
+          Grad<span>LivIn</span>
         </div>
         <div className="nav-links">
           {[ ["home","Home"],["explore","Explore"],["about","About"] ].map(([id,label]) => (
