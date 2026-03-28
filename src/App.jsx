@@ -578,23 +578,13 @@ function getVerdict(score) {
   return VERDICTS.find(v => score >= v.min)?.text ?? "";
 }
 
-// Interpolate between terracotta → gold → sage based on score 0–100
+// Interpolate between blue → green based on score 0–100
 function scoreToColor(score, alpha = 1) {
   const t = Math.max(0, Math.min(100, score)) / 100;
-  let r, g, b;
-  if (t < 0.5) {
-    const f = t / 0.5;
-    // terracotta #C4795A → gold #C9A96E
-    r = Math.round(196 + f * (201 - 196));
-    g = Math.round(121 + f * (169 - 121));
-    b = Math.round(90  + f * (110 - 90));
-  } else {
-    const f = (t - 0.5) / 0.5;
-    // gold #C9A96E → sage #8A9E8C
-    r = Math.round(201 + f * (138 - 201));
-    g = Math.round(169 + f * (158 - 169));
-    b = Math.round(110 + f * (140 - 110));
-  }
+  // blue #0000FF → green #00FF00
+  const r = Math.round(0 + t * (0 - 0));
+  const g = Math.round(0 + t * (255 - 0));
+  const b = Math.round(255 + t * (0 - 255));
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
