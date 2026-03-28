@@ -761,10 +761,10 @@ function HomePage({ onNavigate }) {
         <div className="hero-left">
           <div className="hero-eyebrow">London Graduate Index</div>
           <h1 className="hero-title">
-            Find your<br/><em>perfect</em><br/>London postcode
+            Where<br/><em>should</em><br/>you live
           </h1>
           <p className="hero-body">
-            We weigh rent, nightlife, transport, green space, and more — tuned to what matters to you — to rank every London postcode for life after graduation.
+            We synthesize your priorities to pinpoint the best postcode for you.
           </p>
           <div>
             <button className="btn-primary" onClick={() => onNavigate("explore")}>
