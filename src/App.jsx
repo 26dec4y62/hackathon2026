@@ -761,7 +761,7 @@ function HomePage({ onNavigate }) {
         <div className="hero-left">
           <div className="hero-eyebrow">London Graduate Index</div>
           <h1 className="hero-title">
-            Where<br/><em>should</em><br/>you live
+            Where you<br/><em>should</em><br/>live
           </h1>
           <p className="hero-body">
             We synthesize your priorities to pinpoint the best postcode for you.
@@ -774,8 +774,6 @@ function HomePage({ onNavigate }) {
               How it works
             </button>
           </div>
-          <div className="ai-dot" style={{width:5,height:5,borderRadius:'50%',background:'var(--sage)',display:'inline-block',marginTop:32,marginRight:6,animation:'pulse 2s infinite'}}></div>
-          <span style={{fontSize:12,color:'var(--ink-faint)',fontWeight:300}}>Powered by AI analysis across 119 London postcodes</span>
         </div>
         <div className="hero-right">
           <div className="hero-map-card">
