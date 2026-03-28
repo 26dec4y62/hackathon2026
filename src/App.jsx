@@ -232,12 +232,22 @@ const style = `
   .factor-desc { font-size: 13px; color: var(--ink-faint); line-height: 1.5; font-weight: 300; }
 
   /* ───────── EXPLORE PAGE ───────── */
-  .explore-layout { display: grid; grid-template-columns: 380px 1fr; gap: 0; min-height: calc(100vh - var(--nav-h)); }
+  .explore-layout {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    min-height: calc(100vh - var(--nav-h));
+    height: calc(100vh - var(--nav-h));
+    overflow: hidden;
+  }
   .explore-sidebar {
     border-right: 1px solid var(--stone);
     display: flex; flex-direction: column;
     background: var(--warm-white);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
+  .explore-main { display: flex; flex-direction: column; gap: 16px; height: 100%; overflow: hidden; }
   .sidebar-top { padding: 32px 28px 20px; border-bottom: 1px solid var(--stone); }
   .sidebar-title { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--ink); margin-bottom: 6px; }
   .sidebar-sub { font-size: 13px; color: var(--ink-faint); font-weight: 300; }
@@ -253,7 +263,7 @@ const style = `
     height: 4px; cursor: pointer;
   }
 
-  .results-section { padding: 20px 28px; flex: 1; overflow-y: auto; }
+  .results-section { padding: 20px 28px; flex: 1; }
   .results-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; font-weight: 500; }
   .result-card {
     display: flex; align-items: center; gap: 14px;
@@ -281,7 +291,8 @@ const style = `
   .detail-panel {
     background: var(--cream);
     display: flex; flex-direction: column;
-    overflow-y: auto;
+    flex: 1;
+    overflow: hidden;
   }
   .detail-hero {
     padding: 48px 56px 40px;
@@ -621,14 +632,18 @@ function getVerdict(score) {
   return VERDICTS.find(v => score >= v.min)?.text ?? "";
 }
 
-// Interpolate between blue → green based on score 0–100
-function scoreToColor(score, alpha = 1) {
-  const t = Math.max(0, Math.min(100, score)) / 100;
-  // blue #0000FF → green #00FF00
-  const r = Math.round(0 + t * (0 - 0));
-  const g = Math.round(0 + t * (255 - 0));
-  const b = Math.round(255 + t * (0 - 255));
+// Interpolate blue -> vivid chartreuse from normalized value (0..1)
+function normalizedToColor(value, alpha = 1) {
+  const t = Math.max(0, Math.min(1, value));
+  // Start: blue (#1E5BFF), End: vivid chartreuse (#7FFF00)
+  const r = Math.round(30 + (127 - 30) * t);
+  const g = Math.round(91 + (255 - 91) * t);
+  const b = Math.round(255 + (0 - 255) * t);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function scoreToColor(score, alpha = 1) {
+  return normalizedToColor(score / 100, alpha);
 }
 
 // ── PAGES ─────────────────────────────────────────────────────────────────────
@@ -732,24 +747,56 @@ function ExplorePage() {
   const [weights, setWeights] = useState({ rent:7, nightlife:6, transport:5, greenery:4, age:6, culture:5 });
   const [selected, setSelected] = useState(null);
   const [apiPostcodes, setApiPostcodes] = useState(ALL_POSTCODE_DATA);
-  const [scriptsLoaded, setScriptsLoaded] = useState(!!window.google);
+  const [scriptsLoaded, setScriptsLoaded] = useState(!!window.google?.maps);
+  const [mapError, setMapError] = useState("");
   const mapRef = useRef(null);
   const markersRef = useRef({});
   const mapInstanceRef = useRef(null);
+  const infoWindowRef = useRef(null);
+
+  const handleSelectPostcode = (postcode) => {
+    setSelected(postcode);
+  };
 
   // Load Google Maps script
   useEffect(() => {
-    if (window.google) {
+    if (window.google?.maps) {
       setScriptsLoaded(true);
       return;
     }
 
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY || 'YOUR_GOOGLE_MAPS_KEY';
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
+    if (!apiKey) {
+      setMapError("Missing VITE_GOOGLE_MAPS_KEY in .env");
+      return;
+    }
+
+    window.gm_authFailure = () => {
+      setMapError("Google Maps auth failed. Check API key restrictions, enabled APIs, and billing.");
+    };
+
+    const existingScript = document.querySelector("script[data-google-maps='true']");
+    if (existingScript) {
+      if (window.google?.maps) {
+        setScriptsLoaded(true);
+      } else {
+        existingScript.addEventListener("load", () => setScriptsLoaded(true), { once: true });
+      }
+      return;
+    }
+
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly`;
     script.async = true;
-    script.onload = () => setScriptsLoaded(true);
-    script.onerror = () => console.error('Failed to load Google Maps');
+    script.dataset.googleMaps = "true";
+    script.onload = () => {
+      setMapError("");
+      setScriptsLoaded(true);
+    };
+    script.onerror = () => {
+      setMapError("Failed to load Google Maps script.");
+      console.error('Failed to load Google Maps');
+    };
     document.head.appendChild(script);
   }, []);
 
@@ -770,14 +817,21 @@ function ExplorePage() {
   useEffect(() => {
     if (!scriptsLoaded || !mapRef.current || mapInstanceRef.current) return;
 
-    const map = new window.google.maps.Map(mapRef.current, {
-      zoom: 12,
-      center: { lat: 51.5074, lng: -0.1278 },
-      styles: [
-        { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
-      ],
-    });
-    mapInstanceRef.current = map;
+    try {
+      const map = new window.google.maps.Map(mapRef.current, {
+        zoom: 12,
+        center: { lat: 51.4995, lng: -0.1248 },
+        styles: [
+          { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+        ],
+      });
+      infoWindowRef.current = new window.google.maps.InfoWindow();
+      mapInstanceRef.current = map;
+      setMapError("");
+    } catch (err) {
+      setMapError("Google Maps failed to initialize.");
+      console.error("Google Maps init error", err);
+    }
   }, [scriptsLoaded]);
 
   // Update markers when weights or postcodes change
@@ -793,12 +847,15 @@ function ExplorePage() {
     markersRef.current = {};
 
     // Add new markers
-    ranked.forEach((postcode) => {
+    const denom = Math.max(ranked.length - 1, 1);
+
+    ranked.forEach((postcode, i) => {
       if (!POSTCODE_COORDS_MAP[postcode.code]) return;
 
       const [lat, lng] = POSTCODE_COORDS_MAP[postcode.code];
       const score = postcode.score;
-      const color = scoreToColor(score, 1); // Get RGB color
+      const normalizedRank = ranked.length === 1 ? 1 : 1 - (i / denom);
+      const color = normalizedToColor(normalizedRank, 1);
 
       // Create SVG icon
       const svgIcon = `
@@ -824,7 +881,7 @@ function ExplorePage() {
         title: `${postcode.code} - ${postcode.area} (Score: ${score})`,
       });
 
-      marker.addListener('click', () => setSelected(postcode));
+      marker.addListener('click', () => handleSelectPostcode(postcode));
       markersRef.current[postcode.code] = marker;
     });
   }, [weights, apiPostcodes]);
@@ -839,8 +896,63 @@ function ExplorePage() {
   const selectedData = selected ? ranked.find(r => r.code === selected.code) : null;
   const selectedHighlight = selected ? HIGHLIGHTS.find(h => h.code === selected.code) : null;
 
+  useEffect(() => {
+    if (!selectedData || !mapInstanceRef.current || !window.google) return;
+
+    const marker = markersRef.current[selectedData.code];
+    if (!marker) return;
+
+    const map = mapInstanceRef.current;
+    const pos = marker.getPosition();
+    if (pos) {
+      map.panTo(pos);
+      map.setZoom(14);
+    }
+
+    const vibe = selectedData.score >= 80
+      ? "Very lively"
+      : selectedData.score >= 70
+        ? "Buzzing"
+        : selectedData.score >= 60
+          ? "Relaxed"
+          : "Quiet";
+
+    const factorRows = FACTORS.map(f => `
+      <div style="display:flex; justify-content:space-between; gap:10px; margin-top:4px; font-size:11px; color:#2C2924;">
+        <span style="color:#6B6560;">${f.label}</span>
+        <strong>${selectedData[f.id]}</strong>
+      </div>
+    `).join("");
+
+    const infoContent = `
+      <div style="font-family: DM Sans, Arial, sans-serif; min-width: 250px; max-width: 290px; line-height: 1.35; color:#2C2924;">
+        <div style="font-weight:700; font-size:14px;">${selectedData.code}</div>
+        <div style="font-size:12px; color:#6B6560; margin-top:2px;">${selectedData.area}</div>
+
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #E8E3DA;">
+          <div style="font-size:12px; margin-top:2px;">Overall score: <strong>${selectedData.score}/100</strong></div>
+          <div style="font-size:12px; margin-top:2px;">Avg monthly rent: <strong>${selectedHighlight?.avgRent ?? "N/A"}</strong></div>
+          <div style="font-size:12px; margin-top:2px;">Commute: <strong>${selectedHighlight?.commute ?? "N/A"}</strong></div>
+          <div style="font-size:12px; margin-top:2px;">Nearby venues: <strong>${selectedHighlight?.bars ?? "N/A"}</strong></div>
+          <div style="font-size:12px; margin-top:2px;">Vibe: <strong>${vibe}</strong></div>
+        </div>
+
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid #E8E3DA;">
+          <div style="font-size:11px; letter-spacing:0.4px; text-transform:uppercase; color:#6B6560;">Factor breakdown</div>
+          ${factorRows}
+        </div>
+      </div>
+    `;
+
+    if (!infoWindowRef.current) {
+      infoWindowRef.current = new window.google.maps.InfoWindow();
+    }
+    infoWindowRef.current.setContent(infoContent);
+    infoWindowRef.current.open({ map, anchor: marker });
+  }, [selectedData]);
+
   return (
-    <div className="page" style={{paddingTop:'var(--nav-h)'}}>
+    <div className="page">
       <div className="explore-layout">
         <div className="explore-sidebar">
           <div className="sidebar-top">
@@ -872,7 +984,7 @@ function ExplorePage() {
               <div
                 key={p.code}
                 className={`result-card${selected?.code === p.code ? " selected" : ""}`}
-                onClick={() => setSelected(p)}
+                onClick={() => handleSelectPostcode(p)}
               >
                 <div className={`result-rank${i < 3 ? " top" : ""}`}>{i+1}</div>
                 <div className="result-info">
@@ -882,7 +994,7 @@ function ExplorePage() {
                 <div className="result-score-wrap">
                   <div className="result-score">{p.score}</div>
                   <div className="score-bar-bg">
-                    <div className="score-bar-fill" style={{width:`${p.score}%`}}></div>
+                    <div className="score-bar-fill" style={{width:`${p.score}%`, background: normalizedToColor(ranked.length <= 1 ? 1 : 1 - (i / (ranked.length - 1)), 0.95)}}></div>
                   </div>
                 </div>
               </div>
@@ -890,8 +1002,15 @@ function ExplorePage() {
           </div>
         </div>
 
-        <div style={{flex: 1, display: 'flex', flexDirection: 'column', gap: '16px'}}>
-          <div ref={mapRef} style={{flex: 1, borderRadius: '8px', border: '1px solid var(--stone)', overflow: 'hidden'}} />
+        <div className="explore-main">
+          <div style={{position:'relative'}}>
+            <div ref={mapRef} style={{height: '91vh', minHeight: '420px', borderRadius: '8px', border: '1px solid var(--stone)', overflow: 'hidden'}} />
+            {mapError && (
+              <div style={{position:'absolute', top:'12px', left:'12px', right:'12px', background:'rgba(44,41,36,0.9)', color:'#fff', padding:'8px 10px', borderRadius:'8px', fontSize:'12px'}}>
+                {mapError}
+              </div>
+            )}
+          </div>
           
           <div className="detail-panel">
             {!selectedData ? (

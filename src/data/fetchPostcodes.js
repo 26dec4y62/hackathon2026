@@ -12,15 +12,49 @@ export const LONDON_POSTCODES = [
 // Parse postcodes CSV
 import postcodesCsv from './postcodes.csv?raw';
 
+function toAreaOutcode(postcode) {
+  const compact = postcode.toUpperCase().replace(/\s+/g, '');
+  const match = compact.match(/^([A-Z]{1,2}\d{1,2})/);
+  return match ? match[1] : null;
+}
+
 function parsePostcodesCsv() {
   const lines = postcodesCsv.trim().split('\n');
   const map = {};
+  const buckets = {};
+
   for (let i = 1; i < lines.length; i++) {
     const [id, postcode, lat, lng] = lines[i].split(',');
     if (postcode && lat && lng) {
-      map[postcode.trim()] = [parseFloat(lat), parseFloat(lng)];
+      const key = postcode.trim().toUpperCase().replace(/\s+/g, '');
+      const latNum = parseFloat(lat);
+      const lngNum = parseFloat(lng);
+
+      if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) continue;
+
+      // Keep exact record (e.g. WC2N, W1S)
+      map[key] = [latNum, lngNum];
+
+      // Also aggregate to area outcode (e.g. WC2, W1)
+      const areaCode = toAreaOutcode(key);
+      if (areaCode) {
+        if (!buckets[areaCode]) {
+          buckets[areaCode] = { latSum: 0, lngSum: 0, count: 0 };
+        }
+        buckets[areaCode].latSum += latNum;
+        buckets[areaCode].lngSum += lngNum;
+        buckets[areaCode].count += 1;
+      }
     }
   }
+
+  // Fill outcode centroids so lookup by EC1/W1/WC1/SW1 works.
+  Object.entries(buckets).forEach(([areaCode, b]) => {
+    if (!map[areaCode] && b.count > 0) {
+      map[areaCode] = [b.latSum / b.count, b.lngSum / b.count];
+    }
+  });
+
   return map;
 }
 
